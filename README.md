@@ -1,8 +1,8 @@
-# OpenClaw on DigitalOcean App Platform
+# ClawBot on DigitalOcean App Platform
 
 Deploy [OpenClaw](https://github.com/openclaw/openclaw) - a multi-channel AI messaging gateway - on DigitalOcean App Platform in minutes.
 
-[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/digitalocean-labs/openclaw-appplatform/tree/main)
+[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/erezmvk/ClawBot/tree/main)
 
 ## Quick Start: Choose Your Stage
 

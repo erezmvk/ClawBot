@@ -12,10 +12,10 @@ COPY --from=tailscale /usr/local/bin/tailscaled /usr/local/bin/tailscaled
 COPY --from=tailscale /usr/local/bin/containerboot /usr/local/bin/containerboot
 
 ARG TARGETARCH=amd64
-ARG OPENCLAW_VERSION=2026.1.30
+ARG OPENCLAW_VERSION=2026.2.6
 ARG S6_OVERLAY_VERSION=3.2.1.0
 ARG NODE_MAJOR=24
-ARG RESTIC_VERSION=0.17.3
+ARG RESTIC_VERSION=0.18.1
 ARG NGROK_VERSION=3
 ARG YQ_VERSION=4.44.3
 ARG NVM_VERSION=0.40.4

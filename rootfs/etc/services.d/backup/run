@@ -1,0 +1,27 @@
+#!/bin/bash
+# Periodic backup service using restic
+source /etc/s6-overlay/lib/env-utils.sh
+source_env_prefix RESTIC_
+
+# Skip if ENABLE_SPACES is not true
+if [ "${ENABLE_SPACES:-false}" != "true" ]; then
+  echo "[backup] Disabled (set ENABLE_SPACES=true for persistence)"
+  s6-svc -Od .
+  exit 0
+fi
+
+# Skip if persistence not configured
+if [ -z "$RESTIC_REPOSITORY" ] ; then
+  echo "[backup] ENABLE_SPACES=true but RESTIC_REPOSITORY not set"
+  s6-svc -Od .
+  exit 1
+fi
+
+# Read backup interval from config (default 30 seconds)
+BACKUP_INTERVAL=$(yq -r '.backup_interval_seconds // 30' "$RESTIC_BACKUP_CONFIG_FILE")
+echo "[backup] Starting backup loop (every ${BACKUP_INTERVAL}s)..."
+
+while true; do
+  sleep "$BACKUP_INTERVAL"
+  /usr/local/bin/restic-backup
+done

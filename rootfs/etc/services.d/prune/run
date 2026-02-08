@@ -1,0 +1,29 @@
+#!/bin/bash
+# Periodic prune service using restic
+source /etc/s6-overlay/lib/env-utils.sh
+source_env_prefix RESTIC_
+
+CONFIG_FILE="${RESTIC_BACKUP_CONFIG_FILE:-/etc/digitalocean/backup.yaml}"
+
+# Skip if ENABLE_SPACES is not true
+if [ "${ENABLE_SPACES:-false}" != "true" ]; then
+  echo "[prune] Disabled (set ENABLE_SPACES=true for persistence)"
+  s6-svc -Od .
+  exit 0
+fi
+
+# Skip if persistence not configured
+if [ -z "$RESTIC_REPOSITORY" ] || [ -z "$RESTIC_PASSWORD" ]; then
+  echo "[prune] Persistence not configured, service disabled"
+  s6-svc -Od .
+  exit 0
+fi
+
+# Read prune interval from config (default 6 hours)
+PRUNE_INTERVAL=$(yq -r '.prune_interval_seconds // 21600' "$CONFIG_FILE")
+echo "[prune] Starting prune loop (every ${PRUNE_INTERVAL}s)..."
+
+while true; do
+  sleep "$PRUNE_INTERVAL"
+  /usr/local/bin/restic-prune
+done

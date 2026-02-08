@@ -1,0 +1,19 @@
+#!/bin/bash
+# Tailscale daemon (enabled via TAILSCALE_ENABLE=true)
+source /etc/s6-overlay/lib/env-utils.sh
+source_env_prefix TS_
+
+if [ "${TAILSCALE_ENABLE:-false}" != "true" ]; then
+  echo "[tailscale] Disabled (set TAILSCALE_ENABLE=true to enable)"
+  s6-svc -Od .
+  exit 0
+fi
+
+if [ -z "$TS_AUTHKEY" ]; then
+  echo "[tailscale] ERROR: TAILSCALE_ENABLE=true but TS_AUTHKEY not set" >&2
+  s6-svc -Od .
+  exit 1
+fi
+
+echo "[tailscale] Starting Tailscale daemon..."
+with_env_prefix TS_ -- /usr/local/bin/containerboot

@@ -1,0 +1,83 @@
+#!/command/with-contenv bash
+# Setup restic for DO Spaces backup
+source /etc/s6-overlay/lib/env-utils.sh
+
+persist_env_prefix RESTIC_
+
+persist_env_var RESTIC_ \
+  RESTIC_HOST="${STABLE_HOSTNAME}" \
+  RESTIC_BACKUP_CONFIG_FILE="/etc/digitalocean/backup.yaml" \
+  AWS_ACCESS_KEY_ID="$RESTIC_SPACES_ACCESS_KEY_ID" \
+  AWS_SECRET_ACCESS_KEY="$RESTIC_SPACES_SECRET_ACCESS_KEY"
+
+source_env_prefix RESTIC_
+
+# Skip if persistence not configured
+if [ -z "$RESTIC_SPACES_ACCESS_KEY_ID" ] || [ -z "$RESTIC_SPACES_BUCKET" ]; then
+  echo "[setup-restic] Persistence not configured, skipping"
+  exit 0
+fi
+
+echo "[setup-restic] Configuring restic for DO Spaces..."
+
+# Set restic password (from env or generate a persistent one)
+if [ -z "$RESTIC_PASSWORD" ]; then
+  # Generate a password and store it for future runs
+  if [ -f "$OPENCLAW_STATE_DIR/.restic-password" ]; then
+    RESTIC_PASSWORD=$(cat "$OPENCLAW_STATE_DIR/.restic-password")
+  else
+    RESTIC_PASSWORD=$(openssl rand -base64 32)
+    mkdir -p "$OPENCLAW_STATE_DIR"
+    echo "$RESTIC_PASSWORD" > "$OPENCLAW_STATE_DIR/.restic-password"
+    chmod 600 "$OPENCLAW_STATE_DIR/.restic-password"
+    echo "[setup-restic] Generated new restic password (stored in $OPENCLAW_STATE_DIR/.restic-password)"
+  fi
+fi
+
+# Validate required variables are set
+if [ -z "$RESTIC_SPACES_ENDPOINT" ] || [ -z "$RESTIC_SPACES_BUCKET" ] || [ -z "$RESTIC_HOST" ]; then
+  echo "[setup-restic] ERROR: RESTIC_SPACES_ENDPOINT, RESTIC_SPACES_BUCKET, or RESTIC_HOST not set" >&2
+  echo "[setup-restic] RESTIC_SPACES_ENDPOINT=${RESTIC_SPACES_ENDPOINT:-unset}" >&2
+  echo "[setup-restic] RESTIC_SPACES_BUCKET=${RESTIC_SPACES_BUCKET:-unset}" >&2
+  echo "[setup-restic] RESTIC_HOST=${RESTIC_HOST:-unset}" >&2
+  exit 1
+fi
+
+REPO_TEMPLATE=$(yq -r '.repository' "$RESTIC_BACKUP_CONFIG_FILE")
+RESTIC_REPOSITORY=$(eval echo "$REPO_TEMPLATE")
+
+# Validate repository path was expanded correctly (should not contain ${})
+if echo "$RESTIC_REPOSITORY" | grep -q '\${'; then
+  echo "[setup-restic] ERROR: Repository path contains unexpanded variables: $RESTIC_REPOSITORY" >&2
+  echo "[setup-restic] Template was: $REPO_TEMPLATE" >&2
+  exit 1
+fi
+
+# Ensure Spaces credentials are set
+if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+  echo "[setup-restic] ERROR: AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY not set" >&2
+  exit 1
+fi
+
+# Persist all RESTIC_ vars including RESTIC_REPOSITORY and RESTIC_PASSWORD
+persist_env_var RESTIC_ \
+  RESTIC_REPOSITORY="$RESTIC_REPOSITORY" \
+  RESTIC_PASSWORD="$RESTIC_PASSWORD"
+
+# Re-source to load the persisted vars
+source_env_prefix RESTIC_
+
+# Initialize restic repo if it doesn't exist
+echo "[setup-restic] Checking if restic repository exists..."
+if restic snapshots --latest 1 >/dev/null 2>&1; then
+  echo "[setup-restic] Restic repository already initialized"
+else
+  echo "[setup-restic] Initializing restic repository..."
+  if restic init; then
+    echo "[setup-restic] Restic repository initialized successfully"
+  else
+    echo "[setup-restic] Warning: Failed to initialize restic repository"
+  fi
+fi
+
+echo "[setup-restic] Restic configured (repository: $RESTIC_REPOSITORY)"

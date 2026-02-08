@@ -1,0 +1,24 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local development
+temp/
+
+# Claude logs
+.claude-logs/
+
+# OS files
+.DS_Store
+Thuopenclaws.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temp files
+/tmp/
+*.tmp

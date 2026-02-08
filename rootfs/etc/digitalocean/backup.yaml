@@ -1,0 +1,45 @@
+# OpenClaw Backup Configuration
+# Users can override via RESTIC_BACKUP_CONFIG_FILE env var
+
+# Restic repository location (S3-compatible)
+# Environment variables are expanded at runtime
+repository: "s3:${RESTIC_SPACES_ENDPOINT}/${RESTIC_SPACES_BUCKET}/${RESTIC_HOST}/restic"
+# Backup paths with per-path exclusions
+# Order matters for restore: /etc is restored first after packages
+paths:
+  - path: /etc
+    exclude:
+      - "cont-init.d"
+      - "services.d"
+      - "s6-overlay"
+
+  - path: /root
+    exclude:
+      - "*.lock"
+      - "*.pid"
+      - "*.sock"
+  - path: /data/.openclaw
+    exclude:
+      - "*.lock"
+      - "*.pid"
+      - "*.sock"
+
+  - path: /data/tailscale
+
+  - path: /home
+    exclude:
+      - "*.lock"
+      - "*.pid"
+      - "*.sock"
+
+# Global settings
+backup_interval_seconds: 30 # 30 seconds
+prune_interval_seconds: 3600 # 1 hour
+
+# Retention policy (for restic forget)
+retention:
+  keep_last: 10
+  keep_hourly: 48
+  keep_daily: 30
+  keep_weekly: 8
+  keep_monthly: 6

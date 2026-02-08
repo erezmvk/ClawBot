@@ -1,0 +1,49 @@
+#!/command/with-contenv bash
+set -euo pipefail
+
+# Reinstall Brews for all users (only when persistence is enabled AND Homebrew is installed)
+source /etc/s6-overlay/lib/env-utils.sh
+source_env_prefix HOMEBREW_
+
+# Skip if Homebrew is not installed
+# Homebrew is optional in this image to reduce size (~1.5GB savings)
+if [ ! -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+  echo "[reinstall-brews] Homebrew not installed, skipping"
+  exit 0
+fi
+
+# Skip if persistence is not configured
+if [ "${ENABLE_SPACES:-false}" != "true" ]; then
+  echo "[reinstall-brews] Persistence not configured, skipping"
+  exit 0
+fi
+
+echo "[reinstall-brews] Reinstalling Brews from restic backup"
+
+# Prefer shared Linuxbrew if present, otherwise fall back to PATH inside user shell
+SHARED_BREW="/home/linuxbrew/.linuxbrew/bin/brew"
+
+for homedir in /home/*; do
+  [ -d "$homedir" ] || continue
+
+  username="$(basename "$homedir")"
+
+  # Skip if user doesn't exist
+  id "$username" >/dev/null 2>&1 || continue
+
+  # Get list of installed brews
+  brew_list=$(sudo -u "$username" bash -lc "brew list 2>/dev/null" || true)
+
+  # Skip if no brews installed
+  if [ -z "$brew_list" ]; then
+    echo "[reinstall-brews] No brews installed for $username, skipping"
+    continue
+  fi
+
+  echo "[reinstall-brews] Reinstalling Brews for $username"
+
+  # Use a login shell (-l) so the user's environment is loaded.
+  su - "$username" -s /bin/bash -c '/usr/local/bin/rebrew' || echo "[reinstall-brews] Warning: failed to restore Brews for $username"
+done
+
+echo "[reinstall-brews] Reinstall complete"

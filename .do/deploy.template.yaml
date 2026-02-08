@@ -1,0 +1,77 @@
+spec:
+  name: clawbot
+  region: tor
+  workers:
+    - name: openclaw
+      dockerfile_path: /Dockerfile
+      source_dir: /
+      instance_count: 1
+      instance_size_slug: apps-s-1vcpu-2gb # Minimum 2GB required - 1GB causes heap overflow
+      git:
+        branch: main
+        repo_clone_url: https://github.com/erezmvk/ClawBot.git
+      envs:
+        # Provide your Gradient inference key
+        - key: GRADIENT_API_KEY
+          scope: RUN_TIME
+          type: SECRET
+
+        # Required
+        - key: OPENCLAW_GATEWAY_TOKEN
+          scope: RUN_TIME
+          type: SECRET
+        - key: STABLE_HOSTNAME
+          scope: RUN_TIME
+          value: openclaw
+
+        # Feature flags
+        - key: ENABLE_NGROK
+          scope: RUN_TIME
+          value: "false"
+        - key: TAILSCALE_ENABLE
+          scope: RUN_TIME
+          value: "false"
+        - key: ENABLE_SPACES
+          scope: RUN_TIME
+          value: "false"
+        - key: ENABLE_UI
+          scope: RUN_TIME
+          value: "false"
+
+        # ngrok config
+        - key: NGROK_AUTHTOKEN
+          scope: RUN_TIME
+          type: SECRET
+
+        # Tailscale config
+        - key: TS_AUTHKEY
+          scope: RUN_TIME
+          type: SECRET
+
+        # Spaces config
+        - key: RESTIC_SPACES_ACCESS_KEY_ID
+          scope: RUN_TIME
+          type: SECRET
+        - key: RESTIC_SPACES_SECRET_ACCESS_KEY
+          scope: RUN_TIME
+          type: SECRET
+        - key: RESTIC_SPACES_ENDPOINT
+          scope: RUN_TIME
+          value: tor1.digitaloceanspaces.com
+        - key: RESTIC_SPACES_BUCKET
+          scope: RUN_TIME
+          value: openclaw-backup
+        - key: RESTIC_PASSWORD
+          scope: RUN_TIME
+          type: SECRET
+
+        # Optional
+        - key: OPENCLAW_GATEWAY_TOKEN
+          scope: RUN_TIME
+          type: SECRET
+        - key: SSH_ENABLE
+          scope: RUN_TIME
+          value: "false"
+        - key: GITHUB_USERNAME
+          scope: RUN_TIME
+          value: ""

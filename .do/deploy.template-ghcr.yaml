@@ -3,7 +3,7 @@
 # This file is experimental. Use deploy.template.yaml (builds from source) for now.
 # =============================================================================
 spec:
-  name: clawbot
+  name: openclaw
   region: tor
   workers:
     - name: openclaw

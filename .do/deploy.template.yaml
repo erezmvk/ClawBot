@@ -1,5 +1,5 @@
 spec:
-  name: clawbot
+  name: openclaw
   region: tor
   workers:
     - name: openclaw

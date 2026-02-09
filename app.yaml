@@ -1,4 +1,4 @@
-name: clawbot
+name: openclaw
 region: tor # Available: nyc, ams, sfo, sgp, lon, fra, blr, syd, tor
 
 workers:

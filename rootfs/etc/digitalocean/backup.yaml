@@ -31,6 +31,9 @@ paths:
       - "*.lock"
       - "*.pid"
       - "*.sock"
+      - ".local/share/pnpm/global"
+      - ".nvm"
+      - ".npm/_cacache"
 
 # Global settings
 backup_interval_seconds: 30 # 30 seconds

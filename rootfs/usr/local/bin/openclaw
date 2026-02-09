@@ -7,6 +7,7 @@
 # Source environment utilities
 source /etc/s6-overlay/lib/env-utils.sh
 source_env_prefix OPENCLAW_
+source_env_prefix GRADIENT_
 
 # Run directly if already openclaw user, otherwise switch user
 if [ "$(id -un)" = "openclaw" ]; then

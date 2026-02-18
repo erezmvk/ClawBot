@@ -8,6 +8,8 @@ source_env_prefix OPENCLAW_
 # OpenClaw requires any env vars consumed in config to exist or else it fails to start.
 persist_env_var OPENCLAW_ \
   GRADIENT_API_KEY=change-me \
+  OPENAI_API_KEY="${OPENAI_API_KEY}" \
+  MINIMAX_API_KEY="${MINIMAX_API_KEY}" \
   TAILSCALE_ENABLE="${TAILSCALE_ENABLE:-false}" \
   TS_SOCKET="${TS_SOCKET}" \
   TS_EXTRA_ARGS="${TS_EXTRA_ARGS}" \
@@ -104,6 +106,26 @@ fi
 if [ "${TAILSCALE_ENABLE:-false}" = "true" ]; then
   echo "[generate-config] Adding Tailscale serve config"
   jq '.gateway.tailscale.resetOnExit = true | .gateway.tailscale.mode = "serve" | .gateway.auth.allowTailscale = true' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+fi
+
+# Ensure OpenAI provider exists in config when OPENAI_API_KEY is set
+if [ -n "${OPENAI_API_KEY:-}" ]; then
+  HAS_OPENAI=$(jq -r '.models.providers.openai // empty' "$CONFIG_FILE")
+  if [ -z "$HAS_OPENAI" ]; then
+    echo "[generate-config] Injecting OpenAI provider (OPENAI_API_KEY is set but provider missing from config)"
+    jq '.models.providers.openai = {
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKey": "${OPENAI_API_KEY}",
+      "api": "openai-completions",
+      "models": [
+        {"id":"gpt-5.3","name":"GPT-5.3","reasoning":true,"input":["text","image"],"contextWindow":1047576,"maxTokens":32768},
+        {"id":"gpt-5.2","name":"GPT-5.2","reasoning":true,"input":["text","image"],"contextWindow":1047576,"maxTokens":32768},
+        {"id":"gpt-5-mini","name":"GPT-5 Mini","reasoning":false,"input":["text","image"],"contextWindow":1047576,"maxTokens":16384},
+        {"id":"o3","name":"o3","reasoning":true,"input":["text","image"],"contextWindow":200000,"maxTokens":100000},
+        {"id":"o4-mini","name":"o4-mini","reasoning":true,"input":["text","image"],"contextWindow":200000,"maxTokens":100000}
+      ]
+    }' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+  fi
 fi
 
 # Add gateway auth token to config

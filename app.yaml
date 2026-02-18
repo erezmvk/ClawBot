@@ -88,6 +88,12 @@ workers:
       - key: GRADIENT_API_KEY
         scope: RUN_TIME
         type: SECRET
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: MINIMAX_API_KEY
+        scope: RUN_TIME
+        type: SECRET
 
       # ============================================================
       # AMADEUS ENTERPRISE - Hotel Search MCP

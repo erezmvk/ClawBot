@@ -26,6 +26,76 @@
     "models": {
         "mode": "merge",
         "providers": {
+            "openai": {
+                "baseUrl": "https://api.openai.com/v1",
+                "apiKey": "${OPENAI_API_KEY}",
+                "api": "openai-completions",
+                "models": [
+                    {
+                        "id": "gpt-5.3",
+                        "name": "GPT-5.3",
+                        "reasoning": true,
+                        "input": ["text", "image"],
+                        "contextWindow": 1047576,
+                        "maxTokens": 32768
+                    },
+                    {
+                        "id": "gpt-5.2",
+                        "name": "GPT-5.2",
+                        "reasoning": true,
+                        "input": ["text", "image"],
+                        "contextWindow": 1047576,
+                        "maxTokens": 32768
+                    },
+                    {
+                        "id": "gpt-5-mini",
+                        "name": "GPT-5 Mini",
+                        "reasoning": false,
+                        "input": ["text", "image"],
+                        "contextWindow": 1047576,
+                        "maxTokens": 16384
+                    },
+                    {
+                        "id": "o3",
+                        "name": "o3",
+                        "reasoning": true,
+                        "input": ["text", "image"],
+                        "contextWindow": 200000,
+                        "maxTokens": 100000
+                    },
+                    {
+                        "id": "o4-mini",
+                        "name": "o4-mini",
+                        "reasoning": true,
+                        "input": ["text", "image"],
+                        "contextWindow": 200000,
+                        "maxTokens": 100000
+                    }
+                ]
+            },
+            "minimax": {
+                "baseUrl": "https://api.minimax.chat/v1",
+                "apiKey": "${MINIMAX_API_KEY}",
+                "api": "openai-completions",
+                "models": [
+                    {
+                        "id": "MiniMax-M2.5",
+                        "name": "MiniMax M2.5",
+                        "reasoning": true,
+                        "input": ["text"],
+                        "contextWindow": 1000000,
+                        "maxTokens": 32768
+                    },
+                    {
+                        "id": "MiniMax-M2",
+                        "name": "MiniMax M2",
+                        "reasoning": true,
+                        "input": ["text"],
+                        "contextWindow": 1000000,
+                        "maxTokens": 32768
+                    }
+                ]
+            },
             "gradient": {
                 "baseUrl": "https://inference.do-ai.run/v1",
                 "apiKey": "${GRADIENT_API_KEY}",

@@ -88,6 +88,11 @@ echo "[generate-config] Gateway token configured (OPENCLAW_GATEWAY_TOKEN)"
 # Start with default config as base, but preserve restored config from backup
 if [ -f "$CONFIG_FILE" ]; then
   echo "[generate-config] Existing config found (restored from backup), preserving user settings"
+  # Clean up any invalid keys from older configs (mcpServers was added but not supported)
+  if jq -e '.mcpServers' "$CONFIG_FILE" >/dev/null 2>&1; then
+    echo "[generate-config] Removing unsupported mcpServers key from restored config"
+    jq 'del(.mcpServers)' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+  fi
 elif [ -f "$DEFAULT_CONFIG" ]; then
   cp "$DEFAULT_CONFIG" "$CONFIG_FILE"
   echo "[generate-config] Using default config from $DEFAULT_CONFIG"
@@ -127,19 +132,6 @@ if [ -n "${OPENAI_API_KEY:-}" ]; then
       ]
     }' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
   fi
-fi
-
-# Register Amadeus Hotels MCP server if credentials are set
-if [ -n "${AMADEUS_CLIENT_ID:-}" ] && [ -n "${AMADEUS_CLIENT_SECRET:-}" ]; then
-  echo "[generate-config] Adding Amadeus Hotels MCP server to config"
-  MCP_NODE_PATH=$(su - openclaw -c 'export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" && which node 2>/dev/null' || echo "/usr/local/bin/node")
-  jq --arg nodePath "$MCP_NODE_PATH" '.mcpServers["amadeus-hotels"] = {
-    "command": $nodePath,
-    "args": ["/home/openclaw/mcp-servers/amadeus-hotels/build/index.js"],
-    "disabled": false
-  }' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
-else
-  echo "[generate-config] Skipping Amadeus MCP (no credentials)"
 fi
 
 # Add gateway auth token to config

@@ -128,7 +128,7 @@ COPY --chown=openclaw:openclaw mcp-servers/ /home/openclaw/mcp-servers/
 RUN export NVM_DIR="$HOME/.nvm" \
   && . "$NVM_DIR/nvm.sh" \
   && cd /home/openclaw/mcp-servers/amadeus-hotels \
-  && npm ci \
+  && NODE_ENV=development npm ci \
   && npm run build
 
 # Switch back to root for final setup

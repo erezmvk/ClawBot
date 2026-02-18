@@ -1,0 +1,42 @@
+#!/command/with-contenv bash
+# ---------------------------------------------------------------------------
+# Setup Amadeus Hotels MCP server with OpenClaw via mcporter.
+# Skipped silently if credentials are not configured.
+# ---------------------------------------------------------------------------
+
+source /etc/s6-overlay/lib/env-utils.sh
+source_env_prefix OPENCLAW_
+
+MCP_SERVER_PATH="/home/openclaw/mcp-servers/amadeus-hotels/build/index.js"
+
+# Skip if no Amadeus credentials are configured
+if [ -z "${AMADEUS_CLIENT_ID:-}" ] || [ -z "${AMADEUS_CLIENT_SECRET:-}" ]; then
+  echo "[amadeus-mcp] AMADEUS_CLIENT_ID or AMADEUS_CLIENT_SECRET not set - skipping MCP registration"
+  exit 0
+fi
+
+# Skip if the server binary doesn't exist (build step may have failed)
+if [ ! -f "$MCP_SERVER_PATH" ]; then
+  echo "[amadeus-mcp] ERROR: MCP server not found at $MCP_SERVER_PATH" >&2
+  echo "[amadeus-mcp] The image may need to be rebuilt." >&2
+  exit 0
+fi
+
+echo "[amadeus-mcp] Registering Amadeus Hotels MCP server with mcporter..."
+
+# Register the MCP server as the openclaw user.
+# The process will inherit the container environment (which includes the
+# Amadeus credentials set via DigitalOcean App Platform secrets), so we
+# don't need to pass them explicitly here.
+su - openclaw -c "
+  export NVM_DIR=\"\$HOME/.nvm\"
+  [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"
+  export PNPM_HOME=\"\$HOME/.local/share/pnpm\"
+  export PATH=\"\$PNPM_HOME:\$PATH\"
+
+  # Remove stale registration if it exists, then re-add
+  mcporter config remove amadeus-hotels 2>/dev/null || true
+  mcporter config add amadeus-hotels \\
+    --command 'node $MCP_SERVER_PATH' 2>&1
+" && echo "[amadeus-mcp] Amadeus Hotels MCP server registered successfully." \
+  || echo "[amadeus-mcp] WARNING: mcporter registration failed. Hotel search tools may not be available."

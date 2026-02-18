@@ -88,6 +88,28 @@ workers:
       - key: GRADIENT_API_KEY
         scope: RUN_TIME
         type: SECRET
+
+      # ============================================================
+      # AMADEUS ENTERPRISE - Hotel Search MCP
+      # Set credentials to enable the travel agent assistant.
+      # Leave blank to disable hotel search tools.
+      # ============================================================
+      - key: AMADEUS_CLIENT_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: AMADEUS_CLIENT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: AMADEUS_GUEST_OFFICE_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: AMADEUS_ENV
+        scope: RUN_TIME
+        value: "production"
+      - key: AMADEUS_RATE_CODES
+        scope: RUN_TIME
+        value: ""
+
       - key: SSH_ENABLE
         scope: RUN_TIME
         value: "false"

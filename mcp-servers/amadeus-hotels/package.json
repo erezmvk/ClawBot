@@ -1,0 +1,24 @@
+{
+  "name": "amadeus-hotels-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Amadeus Enterprise hotel search with negotiated rates",
+  "type": "module",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc && chmod +x build/index.js",
+    "dev": "tsc --watch",
+    "start": "node build/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.10.0",
+    "axios": "^1.7.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

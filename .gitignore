@@ -22,3 +22,7 @@ Thuopenclaws.db
 # Temp files
 /tmp/
 *.tmp
+
+# MCP server build artifacts (node_modules/build/ are also in mcp-servers/*/.gitignore)
+mcp-servers/*/node_modules/
+mcp-servers/*/build/

@@ -122,6 +122,15 @@ RUN export SHELL=/bin/bash  && export NVM_DIR="$HOME/.nvm" \
   && export PATH="$PNPM_HOME:$PATH" \
   && pnpm add -g "openclaw@${OPENCLAW_VERSION}"
 
+# Copy and build Amadeus Hotels MCP server
+# (node is available via nvm at this point)
+COPY --chown=openclaw:openclaw mcp-servers/ /home/openclaw/mcp-servers/
+RUN export NVM_DIR="$HOME/.nvm" \
+  && . "$NVM_DIR/nvm.sh" \
+  && cd /home/openclaw/mcp-servers/amadeus-hotels \
+  && npm ci \
+  && npm run build
+
 # Switch back to root for final setup
 USER root
 

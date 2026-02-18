@@ -94,6 +94,9 @@ workers:
       - key: MINIMAX_API_KEY
         scope: RUN_TIME
         type: SECRET
+      - key: ANTHROPIC_API_KEY
+        scope: RUN_TIME
+        type: SECRET
 
       # ============================================================
       # AMADEUS ENTERPRISE - Hotel Search MCP

@@ -129,6 +129,19 @@ if [ -n "${OPENAI_API_KEY:-}" ]; then
   fi
 fi
 
+# Register Amadeus Hotels MCP server if credentials are set
+if [ -n "${AMADEUS_CLIENT_ID:-}" ] && [ -n "${AMADEUS_CLIENT_SECRET:-}" ]; then
+  echo "[generate-config] Adding Amadeus Hotels MCP server to config"
+  MCP_NODE_PATH=$(su - openclaw -c 'export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" && which node 2>/dev/null' || echo "/usr/local/bin/node")
+  jq --arg nodePath "$MCP_NODE_PATH" '.mcpServers["amadeus-hotels"] = {
+    "command": $nodePath,
+    "args": ["/home/openclaw/mcp-servers/amadeus-hotels/build/index.js"],
+    "disabled": false
+  }' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+else
+  echo "[generate-config] Skipping Amadeus MCP (no credentials)"
+fi
+
 # Add gateway auth token to config
 echo "[generate-config] Adding gateway.auth.token to config"
 jq --arg token "$OPENCLAW_GATEWAY_TOKEN" '.gateway.auth.token = $token | .gateway.auth.mode = "token"' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"

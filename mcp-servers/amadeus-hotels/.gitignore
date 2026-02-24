@@ -1,2 +1,6 @@
 node_modules/
 build/
+test-local.mjs
+debug-offers.mjs
+generate-prod-log.mjs
+prod-test-logs-*/

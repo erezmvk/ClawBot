@@ -15,17 +15,76 @@ import {
 // These map Amadeus rate codes to their program names so the AI can surface
 // them meaningfully to the user.
 // ---------------------------------------------------------------------------
-export const SUPPLIER_CODES: Record<string, { name: string; description: string }> = {
-  APS: { name: "Virtuoso", description: "Exclusive luxury travel network – VIP amenities and upgrades" },
-  PP6: { name: "Four Seasons Preferred Partner", description: "Exclusive benefits at Four Seasons properties" },
-  "3MF": { name: "Mandarin Oriental Fan Club", description: "Fan Club benefits at Mandarin Oriental properties worldwide" },
-  "1HZ": { name: "Hyatt Privé", description: "Exclusive amenities at Hyatt Hotels via Privé program" },
-  W9E: { name: "SLH (Small Luxury Hotels)", description: "Boutique luxury experiences through Small Luxury Hotels" },
-  PR2: { name: "Preferred Hotels & Resorts", description: "Preferred Hotels iPrefer benefits and amenities" },
-  RAC: { name: "Rack Rate", description: "Standard published hotel rate" },
-  AAA: { name: "AAA Rate", description: "Special rates for AAA/CAA members" },
-  BED: { name: "Bed & Breakfast", description: "Rate including daily breakfast" },
-  PFK: { name: "Package Rate", description: "Special package with additional amenities" },
+// Luxury consortium rate codes - auto-injected into every offer search to
+// surface negotiated rates when available.  The Amadeus v3 API allows up to
+// ~6 rate codes per request, so we keep only the consortium programs here.
+export const SUPPLIER_CODES: Record<string, { name: string; description: string; benefits: string[] }> = {
+  APS: {
+    name: "Virtuoso",
+    description: "Exclusive luxury travel network - VIP amenities and upgrades",
+    benefits: [
+      "Room upgrade at check-in (subject to availability)",
+      "Daily breakfast for two",
+      "Early check-in / late checkout (subject to availability)",
+      "USD 100 hotel credit per stay",
+      "Complimentary Wi-Fi",
+    ],
+  },
+  PP6: {
+    name: "Four Seasons Preferred Partner",
+    description: "Exclusive benefits at Four Seasons properties",
+    benefits: [
+      "Room upgrade at check-in (subject to availability)",
+      "Daily breakfast for two",
+      "Late checkout (subject to availability)",
+      "USD 100 hotel credit per stay",
+      "Complimentary Wi-Fi",
+    ],
+  },
+  "3MF": {
+    name: "Mandarin Oriental Fan Club",
+    description: "Fan Club benefits at Mandarin Oriental properties worldwide",
+    benefits: [
+      "Room upgrade at check-in (subject to availability)",
+      "Daily breakfast for two",
+      "Early check-in / late checkout (subject to availability)",
+      "USD 100 hotel credit per stay",
+      "Complimentary pressing of two garments",
+    ],
+  },
+  "1HZ": {
+    name: "Hyatt Prive",
+    description: "Exclusive amenities at Hyatt Hotels via Prive program",
+    benefits: [
+      "Room upgrade at check-in (subject to availability)",
+      "Daily breakfast for two",
+      "Early check-in / late checkout (subject to availability)",
+      "USD 100 property credit per stay",
+      "Complimentary Wi-Fi",
+    ],
+  },
+  W9E: {
+    name: "SLH (Small Luxury Hotels)",
+    description: "Boutique luxury experiences through Small Luxury Hotels of the World",
+    benefits: [
+      "Room upgrade at check-in (subject to availability)",
+      "Daily breakfast for two",
+      "Late checkout (subject to availability)",
+      "USD 100 hotel credit per stay",
+      "VIP recognition",
+    ],
+  },
+  PR2: {
+    name: "Preferred Hotels & Resorts",
+    description: "Preferred Hotels iPrefer benefits and amenities",
+    benefits: [
+      "Room upgrade at check-in (subject to availability)",
+      "Daily breakfast for two",
+      "Late checkout (subject to availability)",
+      "USD 100 property credit per stay",
+      "iPrefer loyalty points",
+    ],
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -51,17 +110,18 @@ export class AmadeusClient {
     //   UAT/Test:   AMADEUS_CLIENT_ID, AMADEUS_CLIENT_SECRET, AMADEUS_GUEST_OFFICE_ID
     //
     // Set AMADEUS_ENV=test to use Enterprise UAT (test.travel.api.amadeus.com)
-    // Leave unset / set to "production" for live Enterprise API (api.amadeus.com)
+    // Leave unset / set to "production" for live Enterprise API (travel.api.amadeus.com)
     this.clientId = process.env.AMADEUS_CLIENT_ID ?? "";
     this.clientSecret = process.env.AMADEUS_CLIENT_SECRET ?? "";
     this.guestOfficeId = process.env.AMADEUS_GUEST_OFFICE_ID;
 
-    // Enterprise URLs differ from the Self-Service sandbox:
-    //   Production:  https://api.amadeus.com
+    // Enterprise URLs:
+    //   Production:     https://travel.api.amadeus.com
     //   Enterprise UAT: https://test.travel.api.amadeus.com
+    // Note: https://api.amadeus.com is the Self-Service API – do NOT use it for Enterprise.
     this.baseUrl = isTest
       ? "https://test.travel.api.amadeus.com"
-      : "https://api.amadeus.com";
+      : "https://travel.api.amadeus.com";
     this.authUrl = `${this.baseUrl}/v1/security/oauth2/token`;
 
     // Supplier/rate codes to automatically include in every offer search.
@@ -84,10 +144,15 @@ export class AmadeusClient {
 
     this.http = axios.create({ baseURL: this.baseUrl });
 
-    // Auto-attach bearer token to every API request
+    // Auto-attach bearer token and Ama-Client-Ref to every API request.
+    // The Ama-Client-Ref header is required by the Amadeus Enterprise API
+    // gateway for request routing and correlation.
     this.http.interceptors.request.use(async (config) => {
       const token = await this.getAccessToken();
       config.headers.Authorization = `Bearer ${token}`;
+      if (!config.headers["Ama-Client-Ref"]) {
+        config.headers["Ama-Client-Ref"] = AmadeusClient.generateRef();
+      }
       return config;
     });
   }
@@ -114,7 +179,12 @@ export class AmadeusClient {
     const response = await axios.post<AmadeusTokenResponse>(
       this.authUrl,
       new URLSearchParams(params).toString(),
-      { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Ama-Client-Ref": AmadeusClient.generateRef(),
+        },
+      }
     );
 
     this.accessToken = response.data.access_token;
@@ -188,13 +258,16 @@ export class AmadeusClient {
       batches.push(allIds.slice(i, i + BATCH_SIZE));
     }
 
-    // Merge caller-provided codes with defaults; deduplicate
+    // Merge caller-provided codes with defaults; deduplicate.
+    // The Amadeus v3 API limits rateCodes to ~6 items per request.
+    // We prioritize caller-provided codes, then fill with defaults.
+    const MAX_RATE_CODES = 6;
     const rateCodes = [
       ...new Set([
         ...(params.rateCodes ?? []),
         ...this.defaultSupplierCodes,
       ]),
-    ];
+    ].slice(0, MAX_RATE_CODES);
 
     const allResults: HotelOffer[] = [];
 
@@ -208,7 +281,7 @@ export class AmadeusClient {
           checkInDate: params.checkInDate,
           checkOutDate: params.checkOutDate,
           roomQuantity: String(params.roomQuantity ?? 1),
-          paymentPolicy: params.paymentPolicy ?? "NONE",
+          paymentPolicy: params.paymentPolicy ?? "GUARANTEE",
           includeClosed: "false",
           view: "FULL",
           bestRateOnly: "false", // Return all available rates, not just the cheapest
@@ -300,11 +373,22 @@ export class AmadeusClient {
 
   // ---- Helpers --------------------------------------------------------------
 
+  /**
+   * Generate a unique Ama-Client-Ref value.
+   * Format: HADASSIM-{timestamp}-{random}
+   * Required by the Amadeus Enterprise API gateway on every request.
+   */
+  static generateRef(): string {
+    const ts = Date.now();
+    const rand = Math.random().toString(36).slice(2, 15);
+    return `HADASSIM-${ts}-${rand}`;
+  }
+
   getDefaultSupplierCodes(): string[] {
     return this.defaultSupplierCodes;
   }
 
   getEnvironment(): string {
-    return process.env.AMADEUS_ENV === "test" ? "UAT (test.travel.api.amadeus.com)" : "Production (api.amadeus.com)";
+    return process.env.AMADEUS_ENV === "test" ? "UAT (test.travel.api.amadeus.com)" : "Production (travel.api.amadeus.com)";
   }
 }

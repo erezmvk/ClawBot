@@ -28,17 +28,15 @@ paths:
 
   - path: /data/tailscale
 
-  - path: /home
-    exclude:
-      - "*.lock"
-      - "*.pid"
-      - "*.sock"
-      - "node_modules"
-      - ".local/share/pnpm"
-      - ".nvm"
-      - ".npm"
-      - ".cache"
-      - ".config/pnpm"
+  # /home is intentionally NOT backed up.
+  # All openclaw memory, MEMORY.md, USER.md, session transcripts, and conversation
+  # history live in /data/.openclaw (backed up above). The /home directory only
+  # contains the openclaw binary + node_modules baked into the Docker image, and
+  # files regenerated on every startup by cont-init scripts.
+  # Backing up /home caused snapshots to grow to 2-4 GiB and OOM-killed the
+  # container during restore on every startup (exit code 137).
+  # Reference: https://docs.openclaw.ai/install/docker (only ~/.openclaw + workspace
+  # need to persist across container recreation).
 
 # Global settings
 backup_interval_seconds: 30 # 30 seconds

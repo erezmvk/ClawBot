@@ -67,9 +67,12 @@ persist_env_var RESTIC_ \
 # Re-source to load the persisted vars
 source_env_prefix RESTIC_
 
-# Initialize restic repo if it doesn't exist
+# Initialize restic repo if it doesn't exist.
+# Use 'restic cat config' instead of 'restic snapshots' - it only fetches the single
+# tiny repo config file from S3 (~1 KB) rather than downloading the full snapshot
+# index (which grows large over time). Both make a network call; this one is fast.
 echo "[setup-restic] Checking if restic repository exists..."
-if restic snapshots --latest 1 >/dev/null 2>&1; then
+if restic cat config >/dev/null 2>&1; then
   echo "[setup-restic] Restic repository already initialized"
 else
   echo "[setup-restic] Initializing restic repository..."

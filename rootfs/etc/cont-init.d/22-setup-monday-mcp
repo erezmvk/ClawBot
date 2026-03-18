@@ -1,0 +1,41 @@
+#!/command/with-contenv bash
+# ---------------------------------------------------------------------------
+# Setup Monday.com Boards MCP server with OpenClaw via mcporter.
+# Skipped silently if API token is not configured.
+# ---------------------------------------------------------------------------
+
+source /etc/s6-overlay/lib/env-utils.sh
+source_env_prefix OPENCLAW_
+
+MCP_SERVER_PATH="/home/openclaw/mcp-servers/monday/build/index.js"
+
+# Skip if no Monday API token is configured
+if [ -z "${MONDAY_API_TOKEN:-}" ]; then
+  echo "[monday-mcp] MONDAY_API_TOKEN not set - skipping MCP registration"
+  exit 0
+fi
+
+# Skip if the server binary doesn't exist (build step may have failed)
+if [ ! -f "$MCP_SERVER_PATH" ]; then
+  echo "[monday-mcp] ERROR: MCP server not found at $MCP_SERVER_PATH" >&2
+  echo "[monday-mcp] The image may need to be rebuilt." >&2
+  exit 0
+fi
+
+echo "[monday-mcp] Registering Monday.com Boards MCP server with mcporter..."
+
+# Register the MCP server as the openclaw user.
+# The process will inherit the container environment (which includes the
+# Monday credentials set via DigitalOcean App Platform secrets).
+su - openclaw -c "
+  export NVM_DIR=\"\$HOME/.nvm\"
+  [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"
+  export PNPM_HOME=\"\$HOME/.local/share/pnpm\"
+  export PATH=\"\$PNPM_HOME:\$PATH\"
+
+  # Remove stale registration if it exists, then re-add
+  mcporter config remove monday-boards 2>/dev/null || true
+  mcporter config add monday-boards \\
+    --command 'node $MCP_SERVER_PATH' 2>&1
+" && echo "[monday-mcp] Monday.com Boards MCP server registered successfully." \
+  || echo "[monday-mcp] WARNING: mcporter registration failed. Monday tools may not be available."

@@ -12,7 +12,7 @@ COPY --from=tailscale /usr/local/bin/tailscaled /usr/local/bin/tailscaled
 COPY --from=tailscale /usr/local/bin/containerboot /usr/local/bin/containerboot
 
 ARG TARGETARCH=amd64
-ARG OPENCLAW_VERSION=2026.2.17
+ARG OPENCLAW_VERSION=2026.3.13
 ARG S6_OVERLAY_VERSION=3.2.1.0
 ARG NODE_MAJOR=24
 ARG RESTIC_VERSION=0.18.1
@@ -122,12 +122,15 @@ RUN export SHELL=/bin/bash  && export NVM_DIR="$HOME/.nvm" \
   && export PATH="$PNPM_HOME:$PATH" \
   && pnpm add -g "openclaw@${OPENCLAW_VERSION}"
 
-# Copy and build Amadeus Hotels MCP server
+# Copy and build MCP servers
 # (node is available via nvm at this point)
 COPY --chown=openclaw:openclaw mcp-servers/ /home/openclaw/mcp-servers/
 RUN export NVM_DIR="$HOME/.nvm" \
   && . "$NVM_DIR/nvm.sh" \
   && cd /home/openclaw/mcp-servers/amadeus-hotels \
+  && NODE_ENV=development npm ci \
+  && npm run build \
+  && cd /home/openclaw/mcp-servers/monday \
   && NODE_ENV=development npm ci \
   && npm run build
 

@@ -115,10 +115,13 @@ if [ "${ENABLE_UI:-true}" = "false" ]; then
   jq '.gateway.controlUi.enabled = false' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
 fi
 
-# Add Tailscale config when enabled
+# Add Tailscale config when enabled, or clean it up when disabled
 if [ "${TAILSCALE_ENABLE:-false}" = "true" ]; then
   echo "[generate-config] Adding Tailscale serve config"
   jq '.gateway.tailscale.resetOnExit = true | .gateway.tailscale.mode = "serve" | .gateway.auth.allowTailscale = true' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+else
+  echo "[generate-config] Tailscale disabled - removing stale tailscale serve config if present"
+  jq 'del(.gateway.tailscale) | .gateway.auth.allowTailscale = false' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
 fi
 
 # Ensure OpenAI provider exists in config when OPENAI_API_KEY is set

@@ -12,6 +12,8 @@ paths:
       - "cont-init.d"
       - "services.d"
       - "s6-overlay"
+      - "digitalocean"
+      - "openclaw"
 
   - path: /root
     exclude:

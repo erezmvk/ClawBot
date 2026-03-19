@@ -214,20 +214,40 @@ for _WW in "${_WAKE_WORDS[@]}"; do
   WAKE_WORDS_JSON=$(printf '%s' "$WAKE_WORDS_JSON" | jq --arg w "$_WW" '. + [$w]')
 done
 
+# Build per-group tool allow JSON: {"<id>": {"requireMention": true, "tools": {"alsoAllow": ["monday-boards.*"]}}}
+GROUPS_WITH_TOOLS_JSON="{}"
+for _GID in "${_GROUP_IDS[@]}"; do
+  _GID="${_GID// /}"
+  [ -z "$_GID" ] && continue
+  GROUPS_WITH_TOOLS_JSON=$(printf '%s' "$GROUPS_WITH_TOOLS_JSON" | jq --arg id "$_GID" \
+    '. + {($id): {"requireMention": true, "tools": {"alsoAllow": ["monday-boards.*"]}}}')
+done
+
+# Build bindings array: one entry per group routing to "main" agent
+BINDINGS_JSON="[]"
+for _GID in "${_GROUP_IDS[@]}"; do
+  _GID="${_GID// /}"
+  [ -z "$_GID" ] && continue
+  BINDINGS_JSON=$(printf '%s' "$BINDINGS_JSON" | jq --arg id "$_GID" \
+    '. + [{"agentId": "main", "match": {"channel": "whatsapp", "peer": {"kind": "group", "id": $id}}}]')
+done
+
 # Merge into config:
-#  - channels.whatsapp.groups         <- our groups (merged with any pre-existing ones)
-#  - agents.list[0].groupChat.mentionPatterns <- wake words
-#    (groupChat belongs on list items, NOT on agents.defaults)
-#    If agents.list is empty/absent, a minimal "main" agent is created.
-jq --argjson groups "$GROUPS_JSON" \
+#  - channels.whatsapp.groups         <- requireMention + tools.alsoAllow (merged with pre-existing)
+#  - agents.list[0].groupChat.mentionPatterns <- wake words (on list items, NOT agents.defaults)
+#  - bindings                         <- routes each group to the main agent (not auto-reply)
+#    Without a binding, openclaw falls through to the auto-reply handler even when a wake word fires.
+jq --argjson groups "$GROUPS_WITH_TOOLS_JSON" \
    --argjson wakeWords "$WAKE_WORDS_JSON" \
+   --argjson bindings "$BINDINGS_JSON" \
    '
    .channels.whatsapp.groups = ($groups + (.channels.whatsapp.groups // {})) |
    if ((.agents.list // []) | length) > 0 then
      .agents.list[0].groupChat.mentionPatterns = $wakeWords
    else
      .agents.list = [{"id": "main", "default": true, "groupChat": {"mentionPatterns": $wakeWords}}]
-   end
+   end |
+   .bindings = ($bindings + [(.bindings // [])[] | select(.match.channel != "whatsapp" or .match.peer.kind != "group" or ((.match.peer.id) as $id | $bindings | map(.match.peer.id) | index($id) | not))])
    ' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
 
 echo "[generate-config] WhatsApp group routing configured."

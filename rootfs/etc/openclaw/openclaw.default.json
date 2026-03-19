@@ -195,9 +195,24 @@
         "whatsapp": {
             "groups": {
                 "120363407667070186@g.us": {
-                    "requireMention": true
+                    "requireMention": true,
+                    "tools": {
+                        "alsoAllow": ["monday-boards.*"]
+                    }
                 }
             }
         }
-    }
+    },
+    "bindings": [
+        {
+            "agentId": "main",
+            "match": {
+                "channel": "whatsapp",
+                "peer": {
+                    "kind": "group",
+                    "id": "120363407667070186@g.us"
+                }
+            }
+        }
+    ]
 }

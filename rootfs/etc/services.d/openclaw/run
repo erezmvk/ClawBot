@@ -4,9 +4,27 @@ source /etc/s6-overlay/lib/env-utils.sh
 source_env_prefix OPENCLAW_
 
 echo "[openclaw] Starting openclaw gateway..."
+
+# Kill any stale openclaw gateway process(es) from a previous run before
+# starting a new one.  Without this, a quick s6 restart races with the dying
+# process and the new instance sees "port 18789 in use" immediately.
+if pgrep -u openclaw -f "openclaw gateway" > /dev/null 2>&1; then
+  echo "[openclaw] Stale gateway process found - sending SIGTERM..."
+  pkill -u openclaw -f "openclaw gateway" 2>/dev/null || true
+  # Give the process up to 5 s to exit cleanly before we continue.
+  for i in 1 2 3 4 5; do
+    pgrep -u openclaw -f "openclaw gateway" > /dev/null 2>&1 || break
+    echo "[openclaw] Waiting for old process to exit ($i/5)..."
+    sleep 1
+  done
+  # Force-kill anything still hanging.
+  pkill -9 -u openclaw -f "openclaw gateway" 2>/dev/null || true
+  sleep 1
+fi
+
 # Allow openclaw to use tailscale
 if [ "${TAILSCALE_ENABLE:-false}" = "true" ]; then
     tailscale set --operator=openclaw
 fi
 
-with_env_prefix --user openclaw OPENCLAW_ -- openclaw gateway --allow-unconfigured
+exec with_env_prefix --user openclaw OPENCLAW_ -- openclaw gateway --allow-unconfigured

@@ -25,7 +25,9 @@ persist_env_var OPENCLAW_ \
   TS_STATE_DIR="${TS_STATE_DIR}" \
   TS_USERSPACE="${TS_USERSPACE}" \
   OPENCLAW_STATE_DIR=/data/.openclaw \
-  OPENCLAW_WORKSPACE_DIR=/data/workspace
+  OPENCLAW_WORKSPACE_DIR=/data/workspace \
+  WHATSAPP_AGENT_GROUP_IDS="${WHATSAPP_AGENT_GROUP_IDS}" \
+  WHATSAPP_WAKE_WORDS="${WHATSAPP_WAKE_WORDS}"
 
 # Ensure directories exist (only if variables are set)
 [ -n "$OPENCLAW_STATE_DIR" ] && mkdir -p "$OPENCLAW_STATE_DIR"
@@ -169,6 +171,55 @@ fi
 # Add gateway auth token to config
 echo "[generate-config] Adding gateway.auth.token to config"
 jq --arg token "$OPENCLAW_GATEWAY_TOKEN" '.gateway.auth.token = $token | .gateway.auth.mode = "token"' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+
+# ---------------------------------------------------------------------------
+# WhatsApp group agent routing
+#
+# WHATSAPP_AGENT_GROUP_IDS  - comma-separated WhatsApp group JIDs that should
+#   be handled by the full agent (instead of the auto-reply path).
+#   Defaults to the known Product Dev group if not set.
+#
+# WHATSAPP_WAKE_WORDS - comma-separated text patterns that count as a mention
+#   inside those groups.  Defaults to "flashy,פלאשי".
+#
+# Both settings are injected on every container start so they survive config
+# restores from backup that predate this feature.
+# ---------------------------------------------------------------------------
+WHATSAPP_AGENT_GROUP_IDS="${WHATSAPP_AGENT_GROUP_IDS:-120363407667070186@g.us}"
+WHATSAPP_WAKE_WORDS="${WHATSAPP_WAKE_WORDS:-flashy,פלאשי}"
+
+echo "[generate-config] Configuring WhatsApp agent groups: $WHATSAPP_AGENT_GROUP_IDS"
+echo "[generate-config] Wake words: $WHATSAPP_WAKE_WORDS"
+
+# Build the groups JSON object: {"<id>": {"requireMention": true}, ...}
+GROUPS_JSON="{}"
+IFS=',' read -ra _GROUP_IDS <<< "$WHATSAPP_AGENT_GROUP_IDS"
+for _GID in "${_GROUP_IDS[@]}"; do
+  _GID="${_GID// /}"   # strip spaces
+  [ -z "$_GID" ] && continue
+  GROUPS_JSON=$(printf '%s' "$GROUPS_JSON" | jq --arg id "$_GID" '. + {($id): {"requireMention": true}}')
+done
+
+# Build the wake-words JSON array: ["flashy", "פלאשי", ...]
+WAKE_WORDS_JSON="[]"
+IFS=',' read -ra _WAKE_WORDS <<< "$WHATSAPP_WAKE_WORDS"
+for _WW in "${_WAKE_WORDS[@]}"; do
+  _WW="${_WW// /}"
+  [ -z "$_WW" ] && continue
+  WAKE_WORDS_JSON=$(printf '%s' "$WAKE_WORDS_JSON" | jq --arg w "$_WW" '. + [$w]')
+done
+
+# Merge into config:
+#  - channels.whatsapp.groups  <- our groups (merged with any pre-existing ones)
+#  - agents.defaults.groupChat.mentionPatterns  <- wake words
+jq --argjson groups "$GROUPS_JSON" \
+   --argjson wakeWords "$WAKE_WORDS_JSON" \
+   '
+   .channels.whatsapp.groups = ($groups + (.channels.whatsapp.groups // {})) |
+   .agents.defaults.groupChat.mentionPatterns = $wakeWords
+   ' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+
+echo "[generate-config] WhatsApp group routing configured."
 
 # Permissions applied via /etc/digitalocean/permissions.yaml
 

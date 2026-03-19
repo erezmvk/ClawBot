@@ -179,6 +179,18 @@
         "defaults": {
             "model": {
                 "primary": "gradient/openai-gpt-oss-120b"
+            },
+            "groupChat": {
+                "mentionPatterns": ["flashy", "פלאשי"]
+            }
+        }
+    },
+    "channels": {
+        "whatsapp": {
+            "groups": {
+                "120363407667070186@g.us": {
+                    "requireMention": true
+                }
             }
         }
     }

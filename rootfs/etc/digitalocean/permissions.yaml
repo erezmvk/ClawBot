@@ -89,6 +89,14 @@ permissions:
     user: root
     group: root
     mode: "0755"
+  - path: /etc/services.d/*
+    user: root
+    group: root
+    mode: "0755"
+  - path: /etc/services.d/*/*
+    user: root
+    group: root
+    mode: "0755"
   - path: /etc/cont-finish.d
     user: root
     group: root

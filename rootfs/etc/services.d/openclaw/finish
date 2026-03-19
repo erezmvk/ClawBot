@@ -1,0 +1,26 @@
+#!/bin/bash
+# s6-overlay finish script for openclaw.
+# Called by s6 every time the service process exits, BEFORE it is restarted.
+#
+# $1 = exit code of the run script (or 256 if killed by a signal)
+# $2 = signal number that killed it (or 0)
+#
+# Returning from this script allows s6 to restart the service.
+# Sleeping here adds back-off between restart attempts, which prevents the
+# rapid "Gateway already running / port 18789 in use" restart loop that
+# occurs when the old process hasn't fully released the port yet.
+
+EXIT_CODE=$1
+SIGNAL=$2
+
+if [ "$EXIT_CODE" -eq 256 ] 2>/dev/null; then
+  echo "[openclaw/finish] Service was killed by signal $SIGNAL - waiting 5s before restart..."
+  sleep 5
+elif [ "$EXIT_CODE" -ne 0 ] 2>/dev/null; then
+  echo "[openclaw/finish] Service exited with code $EXIT_CODE - waiting 5s before restart..."
+  sleep 5
+else
+  # Clean exit - short delay is fine.
+  echo "[openclaw/finish] Service exited cleanly - waiting 2s before restart..."
+  sleep 2
+fi

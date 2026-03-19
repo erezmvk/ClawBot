@@ -13,12 +13,14 @@
 EXIT_CODE=$1
 SIGNAL=$2
 
+# s6-overlay default finish-script timeout is 5 s, after which it sends SIGKILL.
+# Keep all sleeps under 4 s so we never race against that limit.
 if [ "$EXIT_CODE" -eq 256 ] 2>/dev/null; then
-  echo "[openclaw/finish] Service was killed by signal $SIGNAL - waiting 5s before restart..."
-  sleep 5
+  echo "[openclaw/finish] Service was killed by signal $SIGNAL - waiting 3s before restart..."
+  sleep 3
 elif [ "$EXIT_CODE" -ne 0 ] 2>/dev/null; then
-  echo "[openclaw/finish] Service exited with code $EXIT_CODE - waiting 5s before restart..."
-  sleep 5
+  echo "[openclaw/finish] Service exited with code $EXIT_CODE - waiting 3s before restart..."
+  sleep 3
 else
   # Clean exit - short delay is fine.
   echo "[openclaw/finish] Service exited cleanly - waiting 2s before restart..."

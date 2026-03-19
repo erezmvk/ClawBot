@@ -27,4 +27,4 @@ if [ "${TAILSCALE_ENABLE:-false}" = "true" ]; then
     tailscale set --operator=openclaw
 fi
 
-exec with_env_prefix --user openclaw OPENCLAW_ -- openclaw gateway --allow-unconfigured
+with_env_prefix --user openclaw OPENCLAW_ -- openclaw gateway --allow-unconfigured

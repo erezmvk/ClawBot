@@ -1,13 +1,21 @@
 #!/command/with-contenv bash
 # ---------------------------------------------------------------------------
-# Setup Monday.com Boards MCP server with OpenClaw via mcporter.
-# Skipped silently if API token is not configured.
+# Register Monday.com Boards MCP server with OpenClaw.
+#
+# Strategy (in order):
+#  1. Write the server entry directly into mcpServers in openclaw.json using jq.
+#     This is the reliable, mcporter-free path that works on every deploy.
+#  2. Also attempt mcporter registration for backwards compatibility (if the
+#     binary exists).  Failure here is not fatal since path 1 covers it.
+#
+# Skipped silently if MONDAY_API_TOKEN is not configured.
 # ---------------------------------------------------------------------------
 
 source /etc/s6-overlay/lib/env-utils.sh
 source_env_prefix OPENCLAW_
 
 MCP_SERVER_PATH="/home/openclaw/mcp-servers/monday/build/index.js"
+CONFIG_FILE="${OPENCLAW_STATE_DIR:-/data/.openclaw}/openclaw.json"
 
 # Skip if no Monday API token is configured
 if [ -z "${MONDAY_API_TOKEN:-}" ]; then
@@ -22,20 +30,34 @@ if [ ! -f "$MCP_SERVER_PATH" ]; then
   exit 0
 fi
 
-echo "[monday-mcp] Registering Monday.com Boards MCP server with mcporter..."
+# ---------------------------------------------------------------------------
+# Path 1: Direct JSON injection into openclaw.json (mcpServers key)
+# openclaw 2026.3+ reads mcpServers from the config file natively.
+# We run after 20-setup-openclaw so the file already exists.
+# ---------------------------------------------------------------------------
+if [ -f "$CONFIG_FILE" ]; then
+  echo "[monday-mcp] Registering Monday.com Boards MCP server in openclaw.json..."
+  jq --arg path "$MCP_SERVER_PATH" \
+     '.mcpServers["monday-boards"] = {"command": "node", "args": [$path]}' \
+     "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+  echo "[monday-mcp] Monday.com Boards MCP server registered in openclaw.json."
+else
+  echo "[monday-mcp] WARNING: openclaw.json not found at $CONFIG_FILE - cannot register via jq"
+fi
 
-# Register the MCP server as the openclaw user.
-# The process will inherit the container environment (which includes the
-# Monday credentials set via DigitalOcean App Platform secrets).
+# ---------------------------------------------------------------------------
+# Path 2: mcporter registration (best-effort, requires skill install)
+# ---------------------------------------------------------------------------
 su - openclaw -c "
   export NVM_DIR=\"\$HOME/.nvm\"
   [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"
   export PNPM_HOME=\"\$HOME/.local/share/pnpm\"
   export PATH=\"\$PNPM_HOME:\$PATH\"
 
-  # Remove stale registration if it exists, then re-add
-  mcporter config remove monday-boards 2>/dev/null || true
-  mcporter config add monday-boards \\
-    --command 'node $MCP_SERVER_PATH' 2>&1
-" && echo "[monday-mcp] Monday.com Boards MCP server registered successfully." \
-  || echo "[monday-mcp] WARNING: mcporter registration failed. Monday tools may not be available."
+  if command -v mcporter >/dev/null 2>&1; then
+    mcporter config remove monday-boards 2>/dev/null || true
+    mcporter config add monday-boards \\
+      --command 'node $MCP_SERVER_PATH' 2>&1 \\
+    && echo '[monday-mcp] Also registered via mcporter.'
+  fi
+" 2>/dev/null || true

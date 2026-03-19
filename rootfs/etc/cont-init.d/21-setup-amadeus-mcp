@@ -1,13 +1,21 @@
 #!/command/with-contenv bash
 # ---------------------------------------------------------------------------
-# Setup Amadeus Hotels MCP server with OpenClaw via mcporter.
-# Skipped silently if credentials are not configured.
+# Register Amadeus Hotels MCP server with OpenClaw.
+#
+# Strategy (in order):
+#  1. Write the server entry directly into mcpServers in openclaw.json using jq.
+#     This is the reliable, mcporter-free path that works on every deploy.
+#  2. Also attempt mcporter registration for backwards compatibility (if the
+#     binary exists).  Failure here is not fatal since path 1 covers it.
+#
+# Skipped silently if Amadeus credentials are not configured.
 # ---------------------------------------------------------------------------
 
 source /etc/s6-overlay/lib/env-utils.sh
 source_env_prefix OPENCLAW_
 
 MCP_SERVER_PATH="/home/openclaw/mcp-servers/amadeus-hotels/build/index.js"
+CONFIG_FILE="${OPENCLAW_STATE_DIR:-/data/.openclaw}/openclaw.json"
 
 # Skip if no Amadeus credentials are configured
 if [ -z "${AMADEUS_CLIENT_ID:-}" ] || [ -z "${AMADEUS_CLIENT_SECRET:-}" ]; then
@@ -22,21 +30,34 @@ if [ ! -f "$MCP_SERVER_PATH" ]; then
   exit 0
 fi
 
-echo "[amadeus-mcp] Registering Amadeus Hotels MCP server with mcporter..."
+# ---------------------------------------------------------------------------
+# Path 1: Direct JSON injection into openclaw.json (mcpServers key)
+# openclaw 2026.3+ reads mcpServers from the config file natively.
+# We run after 20-setup-openclaw so the file already exists.
+# ---------------------------------------------------------------------------
+if [ -f "$CONFIG_FILE" ]; then
+  echo "[amadeus-mcp] Registering Amadeus Hotels MCP server in openclaw.json..."
+  jq --arg path "$MCP_SERVER_PATH" \
+     '.mcpServers["amadeus-hotels"] = {"command": "node", "args": [$path]}' \
+     "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+  echo "[amadeus-mcp] Amadeus Hotels MCP server registered in openclaw.json."
+else
+  echo "[amadeus-mcp] WARNING: openclaw.json not found at $CONFIG_FILE - cannot register via jq"
+fi
 
-# Register the MCP server as the openclaw user.
-# The process will inherit the container environment (which includes the
-# Amadeus credentials set via DigitalOcean App Platform secrets), so we
-# don't need to pass them explicitly here.
+# ---------------------------------------------------------------------------
+# Path 2: mcporter registration (best-effort, requires skill install)
+# ---------------------------------------------------------------------------
 su - openclaw -c "
   export NVM_DIR=\"\$HOME/.nvm\"
   [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"
   export PNPM_HOME=\"\$HOME/.local/share/pnpm\"
   export PATH=\"\$PNPM_HOME:\$PATH\"
 
-  # Remove stale registration if it exists, then re-add
-  mcporter config remove amadeus-hotels 2>/dev/null || true
-  mcporter config add amadeus-hotels \\
-    --command 'node $MCP_SERVER_PATH' 2>&1
-" && echo "[amadeus-mcp] Amadeus Hotels MCP server registered successfully." \
-  || echo "[amadeus-mcp] WARNING: mcporter registration failed. Hotel search tools may not be available."
+  if command -v mcporter >/dev/null 2>&1; then
+    mcporter config remove amadeus-hotels 2>/dev/null || true
+    mcporter config add amadeus-hotels \\
+      --command 'node $MCP_SERVER_PATH' 2>&1 \\
+    && echo '[amadeus-mcp] Also registered via mcporter.'
+  fi
+" 2>/dev/null || true

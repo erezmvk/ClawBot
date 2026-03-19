@@ -97,11 +97,8 @@ echo "[generate-config] Gateway token configured (OPENCLAW_GATEWAY_TOKEN)"
 # Start with default config as base, but preserve restored config from backup
 if [ -f "$CONFIG_FILE" ]; then
   echo "[generate-config] Existing config found (restored from backup), preserving user settings"
-  # Clean up any invalid keys from older configs (mcpServers was added but not supported)
-  if jq -e '.mcpServers' "$CONFIG_FILE" >/dev/null 2>&1; then
-    echo "[generate-config] Removing unsupported mcpServers key from restored config"
-    jq 'del(.mcpServers)' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
-  fi
+  # NOTE: mcpServers is a supported key in openclaw 2026.3+ - do NOT remove it.
+  # The MCP setup scripts (21-setup-amadeus-mcp, 22-setup-monday-mcp) write to this key.
   # Clean up agents.defaults.groupChat - groupChat belongs on agents.list[] items, not defaults
   if jq -e '.agents.defaults.groupChat' "$CONFIG_FILE" >/dev/null 2>&1; then
     echo "[generate-config] Removing invalid agents.defaults.groupChat key from config"
@@ -237,11 +234,15 @@ done
 #  - agents.list[0].groupChat.mentionPatterns <- wake words (on list items, NOT agents.defaults)
 #  - bindings                         <- routes each group to the main agent (not auto-reply)
 #    Without a binding, openclaw falls through to the auto-reply handler even when a wake word fires.
+#
+# IMPORTANT: in jq, (A + B) means B wins for duplicate keys.
+# We put $groups LAST so our injected values (requireMention + tools.alsoAllow) always
+# win over whatever the restored config had for those group IDs.
 jq --argjson groups "$GROUPS_WITH_TOOLS_JSON" \
    --argjson wakeWords "$WAKE_WORDS_JSON" \
    --argjson bindings "$BINDINGS_JSON" \
    '
-   .channels.whatsapp.groups = ($groups + (.channels.whatsapp.groups // {})) |
+   .channels.whatsapp.groups = ((.channels.whatsapp.groups // {}) + $groups) |
    if ((.agents.list // []) | length) > 0 then
      .agents.list[0].groupChat.mentionPatterns = $wakeWords
    else

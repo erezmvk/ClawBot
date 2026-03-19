@@ -97,8 +97,13 @@ echo "[generate-config] Gateway token configured (OPENCLAW_GATEWAY_TOKEN)"
 # Start with default config as base, but preserve restored config from backup
 if [ -f "$CONFIG_FILE" ]; then
   echo "[generate-config] Existing config found (restored from backup), preserving user settings"
-  # NOTE: mcpServers is a supported key in openclaw 2026.3+ - do NOT remove it.
-  # The MCP setup scripts (21-setup-amadeus-mcp, 22-setup-monday-mcp) write to this key.
+  # mcpServers is NOT a valid key in openclaw.json - openclaw rejects it with a schema error.
+  # MCP server registration is done via mcporter's own config file (mcporter.json).
+  # Remove the key if it was written by an older version of these init scripts.
+  if jq -e '.mcpServers' "$CONFIG_FILE" >/dev/null 2>&1; then
+    echo "[generate-config] Removing invalid mcpServers key from openclaw.json (belongs in mcporter.json)"
+    jq 'del(.mcpServers)' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+  fi
   # Clean up agents.defaults.groupChat - groupChat belongs on agents.list[] items, not defaults
   if jq -e '.agents.defaults.groupChat' "$CONFIG_FILE" >/dev/null 2>&1; then
     echo "[generate-config] Removing invalid agents.defaults.groupChat key from config"

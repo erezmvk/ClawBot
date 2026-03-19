@@ -102,6 +102,11 @@ if [ -f "$CONFIG_FILE" ]; then
     echo "[generate-config] Removing unsupported mcpServers key from restored config"
     jq 'del(.mcpServers)' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
   fi
+  # Clean up agents.defaults.groupChat - groupChat belongs on agents.list[] items, not defaults
+  if jq -e '.agents.defaults.groupChat' "$CONFIG_FILE" >/dev/null 2>&1; then
+    echo "[generate-config] Removing invalid agents.defaults.groupChat key from config"
+    jq 'del(.agents.defaults.groupChat)' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+  fi
 elif [ -f "$DEFAULT_CONFIG" ]; then
   cp "$DEFAULT_CONFIG" "$CONFIG_FILE"
   echo "[generate-config] Using default config from $DEFAULT_CONFIG"
@@ -210,13 +215,19 @@ for _WW in "${_WAKE_WORDS[@]}"; do
 done
 
 # Merge into config:
-#  - channels.whatsapp.groups  <- our groups (merged with any pre-existing ones)
-#  - agents.defaults.groupChat.mentionPatterns  <- wake words
+#  - channels.whatsapp.groups         <- our groups (merged with any pre-existing ones)
+#  - agents.list[0].groupChat.mentionPatterns <- wake words
+#    (groupChat belongs on list items, NOT on agents.defaults)
+#    If agents.list is empty/absent, a minimal "main" agent is created.
 jq --argjson groups "$GROUPS_JSON" \
    --argjson wakeWords "$WAKE_WORDS_JSON" \
    '
    .channels.whatsapp.groups = ($groups + (.channels.whatsapp.groups // {})) |
-   .agents.defaults.groupChat.mentionPatterns = $wakeWords
+   if ((.agents.list // []) | length) > 0 then
+     .agents.list[0].groupChat.mentionPatterns = $wakeWords
+   else
+     .agents.list = [{"id": "main", "default": true, "groupChat": {"mentionPatterns": $wakeWords}}]
+   end
    ' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
 
 echo "[generate-config] WhatsApp group routing configured."

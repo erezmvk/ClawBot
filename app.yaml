@@ -119,6 +119,18 @@ workers:
         scope: RUN_TIME
         value: ""
 
+      # ============================================================
+      # MONDAY.COM - Board Management MCP
+      # Get token: monday.com > Profile picture > Developers > My Access Tokens
+      # MONDAY_BOARD_IDS supports named format: "id:Board Name,id2:Board Name 2"
+      # ============================================================
+      - key: MONDAY_API_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+      - key: MONDAY_BOARD_IDS
+        scope: RUN_TIME
+        value: ""
+
       - key: SSH_ENABLE
         scope: RUN_TIME
         value: "false"

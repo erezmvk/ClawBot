@@ -6,6 +6,8 @@ import * as fs from "fs";
 import * as path from "path";
 
 const MONDAY_API_URL = "https://api.monday.com/v2";
+// 2024-10 was deprecated on Feb 15 2026; 2025-04 is now the current stable version.
+const MONDAY_API_VERSION = "2025-04";
 
 export interface AllowlistConfig {
   boards: Array<{
@@ -61,17 +63,24 @@ export class MondayClient {
       console.error(`[monday] Warning: Could not load allowlist file: ${(err as Error).message}`);
     }
 
-    // Merge env var boards (these always take priority / are always present)
-    const envBoardIds = (process.env.MONDAY_BOARD_IDS || "")
+    // Merge env var boards (these always take priority / are always present).
+    // Supports two formats:
+    //   - plain IDs:       "1234567890,9876543210"
+    //   - named IDs:       "1234567890:Sales Pipeline,9876543210:Project Tracker"
+    // Named format lets the AI immediately know what each board is.
+    const envEntries = (process.env.MONDAY_BOARD_IDS || "")
       .split(",")
-      .map((id) => id.trim())
-      .filter((id) => id.length > 0);
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
 
-    for (const id of envBoardIds) {
+    for (const entry of envEntries) {
+      const colonIdx = entry.indexOf(":");
+      const id = colonIdx >= 0 ? entry.slice(0, colonIdx).trim() : entry;
+      const name = colonIdx >= 0 ? entry.slice(colonIdx + 1).trim() || undefined : undefined;
       if (!config.boards.find((b) => b.id === id)) {
         config.boards.push({
           id,
-          name: undefined,
+          name,
           addedAt: new Date().toISOString(),
           source: "env",
         });
@@ -157,7 +166,7 @@ export class MondayClient {
       headers: {
         "Content-Type": "application/json",
         Authorization: this.apiToken,
-        "API-Version": "2024-10",
+        "API-Version": MONDAY_API_VERSION,
       },
       body: JSON.stringify(body),
     });
@@ -212,7 +221,31 @@ export class MondayClient {
 
     const limit = options?.limit ?? 50;
 
-    // If filtering by column value, use items_page_by_column_values
+    // ---- Cursor-based pagination (subsequent pages) -------------------------
+    // Per Monday.com docs: after the first page, use the top-level
+    // next_items_page query with the cursor returned from the previous call.
+    if (options?.cursor) {
+      const data = await this.query(`
+        query ($cursor: String!, $limit: Int!) {
+          next_items_page(cursor: $cursor, limit: $limit) {
+            cursor
+            items {
+              id
+              name
+              state
+              group { id title }
+              column_values { id text type value }
+              created_at
+              updated_at
+            }
+          }
+        }
+      `, { cursor: options.cursor, limit });
+      return (data as { next_items_page: unknown }).next_items_page;
+    }
+
+    // ---- Column value filter ------------------------------------------------
+    // Use items_page_by_column_values when a specific column/value filter is given.
     if (options?.columnId && options?.columnValue) {
       const data = await this.query(`
         query ($boardId: ID!, $columns: [ItemsByColumnValuesQuery!]!, $limit: Int!) {
@@ -238,20 +271,45 @@ export class MondayClient {
         limit,
         columns: [{ column_id: options.columnId, column_values: [options.columnValue] }],
       });
-      return data;
+      return (data as { items_page_by_column_values: unknown }).items_page_by_column_values;
     }
 
-    // Standard items_page query with optional group filter
-    const queryRules = options?.groupId
-      ? `query_params: { rules: [{ column_id: "__group__", compare_value: ["${options.groupId}"] }] }`
-      : "";
+    // ---- Group filter -------------------------------------------------------
+    // Nest items_page inside groups(ids: [...]) for a clean group-scoped query.
+    if (options?.groupId) {
+      const data = await this.query(`
+        query ($boardId: ID!, $groupId: String!, $limit: Int!) {
+          boards(ids: [$boardId]) {
+            groups(ids: [$groupId]) {
+              id
+              title
+              items_page(limit: $limit) {
+                cursor
+                items {
+                  id
+                  name
+                  state
+                  group { id title }
+                  column_values { id text type value }
+                  created_at
+                  updated_at
+                }
+              }
+            }
+          }
+        }
+      `, { boardId, groupId: options.groupId, limit });
+      const group = (data as {
+        boards: Array<{ groups: Array<{ items_page: unknown }> }>;
+      }).boards[0]?.groups[0];
+      return group?.items_page ?? null;
+    }
 
-    const cursorArg = options?.cursor ? `cursor: "${options.cursor}"` : "";
-
+    // ---- No filter (all items, first page) ----------------------------------
     const data = await this.query(`
       query ($boardId: ID!, $limit: Int!) {
         boards(ids: [$boardId]) {
-          items_page(limit: $limit ${cursorArg} ${queryRules}) {
+          items_page(limit: $limit) {
             cursor
             items {
               id
@@ -280,18 +338,12 @@ export class MondayClient {
   ): Promise<unknown> {
     this.assertBoardAllowed(boardId);
 
-    const columnValuesStr = options?.columnValues
-      ? JSON.stringify(JSON.stringify(options.columnValues))
-      : "null";
-
-    const groupClause = options?.groupId ? `group_id: "${options.groupId}"` : "";
-
     const data = await this.query(`
-      mutation ($boardId: ID!, $itemName: String!, $columnValues: JSON) {
+      mutation ($boardId: ID!, $itemName: String!, $groupId: String, $columnValues: JSON) {
         create_item(
           board_id: $boardId
           item_name: $itemName
-          ${groupClause}
+          group_id: $groupId
           column_values: $columnValues
         ) {
           id
@@ -304,6 +356,7 @@ export class MondayClient {
     `, {
       boardId,
       itemName,
+      groupId: options?.groupId ?? null,
       columnValues: options?.columnValues ? JSON.stringify(options.columnValues) : null,
     });
 

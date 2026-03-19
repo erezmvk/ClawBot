@@ -124,6 +124,28 @@ else
   jq 'del(.gateway.tailscale) | .gateway.auth.allowTailscale = false' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
 fi
 
+# Ensure MiniMax provider exists in config when MINIMAX_API_KEY is set
+if [ -n "${MINIMAX_API_KEY:-}" ]; then
+  HAS_MINIMAX=$(jq -r '.models.providers.minimax // empty' "$CONFIG_FILE")
+  if [ -z "$HAS_MINIMAX" ]; then
+    echo "[generate-config] Injecting MiniMax provider (MINIMAX_API_KEY is set but provider missing from config)"
+    jq '.models.providers.minimax = {
+      "baseUrl": "https://api.minimax.chat/v1",
+      "apiKey": "${MINIMAX_API_KEY}",
+      "api": "openai-completions",
+      "models": [
+        {"id":"MiniMax-M2.7","name":"MiniMax M2.7","reasoning":true,"input":["text"],"contextWindow":1000000,"maxTokens":32768},
+        {"id":"MiniMax-M2.7-highspeed","name":"MiniMax M2.7 Highspeed","reasoning":false,"input":["text"],"contextWindow":1000000,"maxTokens":32768},
+        {"id":"MiniMax-M2.5","name":"MiniMax M2.5","reasoning":true,"input":["text"],"contextWindow":1000000,"maxTokens":32768},
+        {"id":"MiniMax-M2.5-highspeed","name":"MiniMax M2.5 Highspeed","reasoning":false,"input":["text"],"contextWindow":1000000,"maxTokens":32768},
+        {"id":"MiniMax-M2.1","name":"MiniMax M2.1","reasoning":true,"input":["text"],"contextWindow":1000000,"maxTokens":32768},
+        {"id":"MiniMax-M2.1-highspeed","name":"MiniMax M2.1 Highspeed","reasoning":false,"input":["text"],"contextWindow":1000000,"maxTokens":32768},
+        {"id":"MiniMax-M2","name":"MiniMax M2","reasoning":true,"input":["text"],"contextWindow":1000000,"maxTokens":32768}
+      ]
+    }' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+  fi
+fi
+
 # Ensure OpenAI provider exists in config when OPENAI_API_KEY is set
 if [ -n "${OPENAI_API_KEY:-}" ]; then
   HAS_OPENAI=$(jq -r '.models.providers.openai // empty' "$CONFIG_FILE")

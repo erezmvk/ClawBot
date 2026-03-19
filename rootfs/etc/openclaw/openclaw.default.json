@@ -79,9 +79,49 @@
                 "api": "openai-completions",
                 "models": [
                     {
+                        "id": "MiniMax-M2.7",
+                        "name": "MiniMax M2.7",
+                        "reasoning": true,
+                        "input": ["text"],
+                        "contextWindow": 1000000,
+                        "maxTokens": 32768
+                    },
+                    {
+                        "id": "MiniMax-M2.7-highspeed",
+                        "name": "MiniMax M2.7 Highspeed",
+                        "reasoning": false,
+                        "input": ["text"],
+                        "contextWindow": 1000000,
+                        "maxTokens": 32768
+                    },
+                    {
                         "id": "MiniMax-M2.5",
                         "name": "MiniMax M2.5",
                         "reasoning": true,
+                        "input": ["text"],
+                        "contextWindow": 1000000,
+                        "maxTokens": 32768
+                    },
+                    {
+                        "id": "MiniMax-M2.5-highspeed",
+                        "name": "MiniMax M2.5 Highspeed",
+                        "reasoning": false,
+                        "input": ["text"],
+                        "contextWindow": 1000000,
+                        "maxTokens": 32768
+                    },
+                    {
+                        "id": "MiniMax-M2.1",
+                        "name": "MiniMax M2.1",
+                        "reasoning": true,
+                        "input": ["text"],
+                        "contextWindow": 1000000,
+                        "maxTokens": 32768
+                    },
+                    {
+                        "id": "MiniMax-M2.1-highspeed",
+                        "name": "MiniMax M2.1 Highspeed",
+                        "reasoning": false,
                         "input": ["text"],
                         "contextWindow": 1000000,
                         "maxTokens": 32768

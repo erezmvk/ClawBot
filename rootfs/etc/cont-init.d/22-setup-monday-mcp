@@ -1,17 +1,20 @@
 #!/command/with-contenv bash
 # ---------------------------------------------------------------------------
-# Register Monday.com Boards MCP server with OpenClaw via mcporter.
+# Register Monday.com Boards MCP server with OpenClaw.
 #
-# MCP server registration is stored in mcporter.json (NOT in openclaw.json -
-# openclaw rejects mcpServers as an unrecognized key).
+# Registration happens in TWO places:
 #
-# mcporter.json location: ~/.openclaw/workspace/config/mcporter.json
-# (which maps to /data/.openclaw/workspace/config/mcporter.json since
-#  ~/.openclaw is symlinked to /data/.openclaw)
+# 1. openclaw.json under mcp.servers  (native openclaw key, written by
+#    /mcp set).  This is the CRITICAL registration - without it openclaw does
+#    not recognise "monday-boards" as a known provider and the group sandbox
+#    allowlist fires:
+#      "allowlist contains unknown entries (monday-boards.*)"
 #
-# This script writes directly to mcporter.json using jq, which is reliable
-# and doesn't require the mcporter binary to be installed. If the binary IS
-# present it also runs `mcporter config add` for forward-compatibility.
+# 2. mcporter.json (mcporter skill's own config).  Kept for forward-compat
+#    in case the mcporter binary is installed later.
+#
+# Note: mcpServers (root-level camelCase) is rejected by the openclaw schema
+# validator.  Only the nested mcp.servers key is valid.
 #
 # Skipped silently if MONDAY_API_TOKEN is not configured.
 # ---------------------------------------------------------------------------
@@ -63,7 +66,33 @@ chown openclaw:openclaw "$MCPORTER_CONFIG"
 echo "[monday-mcp] Monday.com Boards MCP server registered in mcporter.json."
 
 # ---------------------------------------------------------------------------
-# Path 2: Also call mcporter CLI if binary is available (best-effort)
+# Path 2: Register in openclaw.json under mcp.servers  (THE CRITICAL STEP)
+#
+# This is the native openclaw MCP server registry (read/written by /mcp set).
+# Without this registration openclaw does not recognise "monday-boards" as a
+# known provider at startup, so the per-group tools.alsoAllow check fires:
+#   "allowlist contains unknown entries (monday-boards.*)"
+# and the group agent cannot use any monday-boards.* tools.
+#
+# Script 20-setup-openclaw runs before this script and has already written
+# openclaw.json, so we can safely patch it here.
+# ---------------------------------------------------------------------------
+CONFIG_FILE="${OPENCLAW_STATE_DIR:-/data/.openclaw}/openclaw.json"
+
+if [ -f "$CONFIG_FILE" ] && jq -e . "$CONFIG_FILE" >/dev/null 2>&1; then
+  echo "[monday-mcp] Registering monday-boards in openclaw.json mcp.servers..."
+  jq --arg path "$MCP_SERVER_PATH" \
+     '.mcp.servers["monday-boards"] = {"command": "node", "args": [$path]}' \
+     "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+  chown openclaw:openclaw "$CONFIG_FILE" 2>/dev/null || true
+  echo "[monday-mcp] monday-boards registered in openclaw.json mcp.servers."
+else
+  echo "[monday-mcp] WARNING: $CONFIG_FILE not found or invalid JSON - cannot register in mcp.servers" >&2
+  echo "[monday-mcp] Group tool allowlist will not work for monday-boards tools" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# Path 3: Also call mcporter CLI if binary is available (best-effort)
 # ---------------------------------------------------------------------------
 su - openclaw -c "
   export NVM_DIR=\"\$HOME/.nvm\"

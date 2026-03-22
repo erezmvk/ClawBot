@@ -191,6 +191,14 @@
             }
         ]
     },
+    "mcp": {
+        "servers": {
+            "monday-boards": {
+                "command": "node",
+                "args": ["/home/openclaw/mcp-servers/monday/build/index.js"]
+            }
+        }
+    },
     "channels": {
         "whatsapp": {
             "groups": {

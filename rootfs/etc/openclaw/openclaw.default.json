@@ -20,6 +20,9 @@
             },
             "discord": {
                 "enabled": true
+            },
+            "monday-boards": {
+                "enabled": true
             }
         }
     },
@@ -190,14 +193,6 @@
                 }
             }
         ]
-    },
-    "mcp": {
-        "servers": {
-            "monday-boards": {
-                "command": "node",
-                "args": ["/home/openclaw/mcp-servers/monday/build/index.js"]
-            }
-        }
     },
     "channels": {
         "whatsapp": {

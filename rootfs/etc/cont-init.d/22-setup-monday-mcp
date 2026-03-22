@@ -2,19 +2,13 @@
 # ---------------------------------------------------------------------------
 # Register Monday.com Boards MCP server with OpenClaw.
 #
-# Registration happens in TWO places:
+# NOTE: Both "mcpServers" (root-level camelCase) and "mcp" (nested) are
+# rejected by the openclaw schema validator as unrecognized keys. MCP server
+# registration for the group sandbox allowlist requires a different approach.
 #
-# 1. openclaw.json under mcp.servers  (native openclaw key, written by
-#    /mcp set).  This is the CRITICAL registration - without it openclaw does
-#    not recognise "monday-boards" as a known provider and the group sandbox
-#    allowlist fires:
-#      "allowlist contains unknown entries (monday-boards.*)"
-#
-# 2. mcporter.json (mcporter skill's own config).  Kept for forward-compat
-#    in case the mcporter binary is installed later.
-#
-# Note: mcpServers (root-level camelCase) is rejected by the openclaw schema
-# validator.  Only the nested mcp.servers key is valid.
+# Current approach: write to mcporter.json, the mcporter skill config file.
+# mcporter bridges external MCP servers to openclaw tool sessions when the
+# mcporter binary is installed.
 #
 # Skipped silently if MONDAY_API_TOKEN is not configured.
 # ---------------------------------------------------------------------------
@@ -66,29 +60,28 @@ chown openclaw:openclaw "$MCPORTER_CONFIG"
 echo "[monday-mcp] Monday.com Boards MCP server registered in mcporter.json."
 
 # ---------------------------------------------------------------------------
-# Path 2: Register in openclaw.json under mcp.servers  (THE CRITICAL STEP)
+# Path 2: Register monday-boards as an enabled plugin in openclaw.json.
 #
-# This is the native openclaw MCP server registry (read/written by /mcp set).
-# Without this registration openclaw does not recognise "monday-boards" as a
-# known provider at startup, so the per-group tools.alsoAllow check fires:
-#   "allowlist contains unknown entries (monday-boards.*)"
-# and the group agent cannot use any monday-boards.* tools.
+# The per-group tools.alsoAllow list is validated against known plugins at
+# config load time. Without this entry the gateway logs:
+#   "allowlist contains unknown entries (monday-boards.*).
+#    These entries won't match any tool unless the plugin is enabled."
+# and the group session never receives monday-boards tools.
 #
-# Script 20-setup-openclaw runs before this script and has already written
-# openclaw.json, so we can safely patch it here.
+# plugins.entries accepts any string key (it is a Record<string, config>
+# in the schema). Adding monday-boards here tells OpenClaw that this name
+# is a valid plugin namespace so alsoAllow: ["monday-boards.*"] resolves.
 # ---------------------------------------------------------------------------
 CONFIG_FILE="${OPENCLAW_STATE_DIR:-/data/.openclaw}/openclaw.json"
 
 if [ -f "$CONFIG_FILE" ] && jq -e . "$CONFIG_FILE" >/dev/null 2>&1; then
-  echo "[monday-mcp] Registering monday-boards in openclaw.json mcp.servers..."
-  jq --arg path "$MCP_SERVER_PATH" \
-     '.mcp.servers["monday-boards"] = {"command": "node", "args": [$path]}' \
+  echo "[monday-mcp] Enabling monday-boards plugin namespace in openclaw.json..."
+  jq '.plugins.entries["monday-boards"] = {"enabled": true}' \
      "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
   chown openclaw:openclaw "$CONFIG_FILE" 2>/dev/null || true
-  echo "[monday-mcp] monday-boards registered in openclaw.json mcp.servers."
+  echo "[monday-mcp] monday-boards plugin namespace enabled."
 else
-  echo "[monday-mcp] WARNING: $CONFIG_FILE not found or invalid JSON - cannot register in mcp.servers" >&2
-  echo "[monday-mcp] Group tool allowlist will not work for monday-boards tools" >&2
+  echo "[monday-mcp] WARNING: $CONFIG_FILE not found - group tool allowlist may not work" >&2
 fi
 
 # ---------------------------------------------------------------------------

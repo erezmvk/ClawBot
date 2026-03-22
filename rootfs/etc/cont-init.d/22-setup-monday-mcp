@@ -1,14 +1,15 @@
 #!/command/with-contenv bash
 # ---------------------------------------------------------------------------
-# Register Monday.com Boards MCP server with OpenClaw.
+# Register Monday.com Boards MCP server with OpenClaw via mcporter.
 #
-# NOTE: Both "mcpServers" (root-level camelCase) and "mcp" (nested) are
-# rejected by the openclaw schema validator as unrecognized keys. MCP server
-# registration for the group sandbox allowlist requires a different approach.
+# MCP server registration is stored in mcporter.json (NOT in openclaw.json -
+# openclaw rejects mcpServers and mcp as unrecognized root-level keys).
 #
-# Current approach: write to mcporter.json, the mcporter skill config file.
-# mcporter bridges external MCP servers to openclaw tool sessions when the
-# mcporter binary is installed.
+# Groups get full MCP tool access by default (no per-group tools config is set
+# on the group entry, which lets groups inherit the full global tool policy
+# including MCP tools - same as DMs). Adding tools.alsoAllow with an
+# unresolvable MCP namespace was creating an implicit restriction; it is now
+# removed.
 #
 # Skipped silently if MONDAY_API_TOKEN is not configured.
 # ---------------------------------------------------------------------------
@@ -60,32 +61,7 @@ chown openclaw:openclaw "$MCPORTER_CONFIG"
 echo "[monday-mcp] Monday.com Boards MCP server registered in mcporter.json."
 
 # ---------------------------------------------------------------------------
-# Path 2: Register monday-boards as an enabled plugin in openclaw.json.
-#
-# The per-group tools.alsoAllow list is validated against known plugins at
-# config load time. Without this entry the gateway logs:
-#   "allowlist contains unknown entries (monday-boards.*).
-#    These entries won't match any tool unless the plugin is enabled."
-# and the group session never receives monday-boards tools.
-#
-# plugins.entries accepts any string key (it is a Record<string, config>
-# in the schema). Adding monday-boards here tells OpenClaw that this name
-# is a valid plugin namespace so alsoAllow: ["monday-boards.*"] resolves.
-# ---------------------------------------------------------------------------
-CONFIG_FILE="${OPENCLAW_STATE_DIR:-/data/.openclaw}/openclaw.json"
-
-if [ -f "$CONFIG_FILE" ] && jq -e . "$CONFIG_FILE" >/dev/null 2>&1; then
-  echo "[monday-mcp] Enabling monday-boards plugin namespace in openclaw.json..."
-  jq '.plugins.entries["monday-boards"] = {"enabled": true}' \
-     "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
-  chown openclaw:openclaw "$CONFIG_FILE" 2>/dev/null || true
-  echo "[monday-mcp] monday-boards plugin namespace enabled."
-else
-  echo "[monday-mcp] WARNING: $CONFIG_FILE not found - group tool allowlist may not work" >&2
-fi
-
-# ---------------------------------------------------------------------------
-# Path 3: Also call mcporter CLI if binary is available (best-effort)
+# Path 2: Also call mcporter CLI if binary is available (best-effort)
 # ---------------------------------------------------------------------------
 su - openclaw -c "
   export NVM_DIR=\"\$HOME/.nvm\"

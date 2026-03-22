@@ -20,9 +20,6 @@
             },
             "discord": {
                 "enabled": true
-            },
-            "monday-boards": {
-                "enabled": true
             }
         }
     },
@@ -198,10 +195,7 @@
         "whatsapp": {
             "groups": {
                 "120363407667070186@g.us": {
-                    "requireMention": true,
-                    "tools": {
-                        "alsoAllow": ["monday-boards.*"]
-                    }
+                    "requireMention": true
                 }
             }
         }

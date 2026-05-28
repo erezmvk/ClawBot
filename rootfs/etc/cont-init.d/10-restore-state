@@ -39,24 +39,22 @@ fi
 
 # Clear stale locks from prior failed/killed restic operations. Without this,
 # a single previous-container-crash leaves locks in the repo that block all
-# subsequent read operations (including this script's snapshot listing).
+# subsequent read operations.
 echo "[restore-state] Clearing stale restic locks..."
 timeout 30 restic unlock --remove-all 2>&1 || echo "[restore-state] (unlock warned/failed - continuing)"
 
-# Check if repository has any snapshots (timeboxed). Use --no-lock to avoid
-# acquiring a write lock on a read-only operation. Capture restic's exit code
-# via PIPESTATUS[0] - NOT $? - because the pipe to grep would otherwise mask
-# a timeout-124 as grep's "no-match-1". DO NOT redirect stderr to /dev/null
-# here - we want restic errors visible so the boot log is debuggable.
+# Check if repository has any snapshots. Use --json + jq instead of grepping
+# the table output - turns out grep against the piped table output is
+# unreliable from s6 cont-init context (returns no-match even when the table
+# is there and identical to the interactive shell's output). The JSON path is
+# unambiguous: empty array means no snapshots, non-empty means restore is
+# possible. Output is captured to /tmp/restic-snapshots.out for debugability.
 echo "[restore-state] Listing snapshots from repository (120s timeout)..."
-timeout 120 restic snapshots --no-lock --latest 1 2>&1 | tee /tmp/restic-snapshots.out | grep -q 'ID'
-RESTIC_RC="${PIPESTATUS[0]}"
-GREP_RC="${PIPESTATUS[2]}"
+SNAPSHOTS_JSON=$(timeout 120 restic snapshots --no-lock --latest 1 --json 2>&1)
+RESTIC_RC=$?
+echo "$SNAPSHOTS_JSON" > /tmp/restic-snapshots.out
 
 if [ "$RESTIC_RC" = "124" ]; then
-  # Timed out. A repo with snapshots that we couldn't list is the most
-  # dangerous case: booting fresh will let the backup loop snapshot the
-  # empty /data/.openclaw on top of the user's real backups.
   echo "[restore-state] ERROR: Timed out listing snapshots from Spaces after 120s." >&2
   echo "[restore-state] Refusing to start openclaw to protect existing snapshots." >&2
   echo "[restore-state] Recovery: set ENABLE_SPACES=false, redeploy, then manually" >&2
@@ -71,16 +69,23 @@ if [ "$RESTIC_RC" = "124" ]; then
   exit 0
 elif [ "$RESTIC_RC" != "0" ]; then
   echo "[restore-state] ERROR: restic snapshots exited with code $RESTIC_RC" >&2
+  echo "[restore-state] restic output:" >&2
+  echo "$SNAPSHOTS_JSON" | head -20 >&2
   if [ "${ALLOW_EMPTY_STATE_BOOT:-false}" != "true" ]; then
     echo "[restore-state] Refusing to start openclaw. Set ALLOW_EMPTY_STATE_BOOT=true to bypass." >&2
     exit 1
   fi
   exit 0
-elif [ "$GREP_RC" != "0" ]; then
-  echo "[restore-state] No snapshots found in repository, skipping"
+fi
+
+# Parse JSON to count snapshots. Use --argjson default so jq doesn't bail on
+# unexpected non-JSON noise mixed into stderr.
+SNAPSHOT_COUNT=$(echo "$SNAPSHOTS_JSON" | jq -r 'if type == "array" then length else 0 end' 2>/dev/null || echo 0)
+if [ "${SNAPSHOT_COUNT:-0}" = "0" ]; then
+  echo "[restore-state] No snapshots found in repository, skipping (raw output saved to /tmp/restic-snapshots.out)"
   exit 0
 fi
-echo "[restore-state] Snapshots present, proceeding with restore"
+echo "[restore-state] Found $SNAPSHOT_COUNT snapshot group(s), proceeding with restore"
 
 # Restore all paths in order (config has /etc first)
 PATH_COUNT=$(yq -r '.paths | length' "$RESTIC_BACKUP_CONFIG_FILE")

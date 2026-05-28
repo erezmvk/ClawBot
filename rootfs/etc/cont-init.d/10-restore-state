@@ -1,9 +1,24 @@
 #!/command/with-contenv bash
-# Restore state paths from restic backup
+# Restore state paths from restic backup.
+#
+# All restic calls are timeboxed. Listing snapshots from Spaces on a fresh
+# container has no local cache and can stall for many minutes on a busy
+# repository (hundreds of snapshots from a 30s backup interval). Without
+# timeouts the container can't boot at all if Spaces is slow.
+#
+# Set SKIP_STATE_RESTORE=true as an emergency bypass - container will start
+# fresh without any backed-up state. Use only when you're prepared to lose
+# bot memory and re-import any state manually.
+
 source /etc/s6-overlay/lib/env-utils.sh
 
 # Load RESTIC_ vars
 source_env_prefix RESTIC_
+
+if [ "${SKIP_STATE_RESTORE:-false}" = "true" ]; then
+  echo "[restore-state] SKIP_STATE_RESTORE=true, skipping (container will start with no backed-up state)"
+  exit 0
+fi
 
 # Check if persistence is configured
 if [ -z "$RESTIC_REPOSITORY" ] || [ -z "$RESTIC_PASSWORD" ]; then
@@ -17,11 +32,18 @@ if [ ! -f "$RESTIC_BACKUP_CONFIG_FILE" ]; then
   exit 1
 fi
 
-# Check if repository has any snapshots
-if ! restic snapshots --latest 1 2>/dev/null | grep -q 'ID'; then
-  echo "[restore-state] No snapshots found in repository, skipping"
+# Check if repository has any snapshots (timeboxed)
+echo "[restore-state] Listing snapshots from repository (120s timeout)..."
+if ! timeout 120 restic snapshots --latest 1 2>/dev/null | grep -q 'ID'; then
+  rc=$?
+  if [ "$rc" = "124" ]; then
+    echo "[restore-state] Timed out listing snapshots - skipping state restore. Container will start fresh."
+  else
+    echo "[restore-state] No snapshots found in repository, skipping"
+  fi
   exit 0
 fi
+echo "[restore-state] Snapshots present, proceeding with restore"
 
 # Restore all paths in order (config has /etc first)
 PATH_COUNT=$(yq -r '.paths | length' "$RESTIC_BACKUP_CONFIG_FILE")
@@ -39,21 +61,29 @@ for i in $(seq 0 $((PATH_COUNT - 1))); do
   # Ensure parent directory exists
   mkdir -p "$(dirname "$RESTORE_PATH")"
 
-  # Find latest snapshot for this specific path
-  SNAPSHOT_ID=$(restic snapshots --path "$RESTORE_PATH" --latest 1 --json 2>/dev/null | jq -r '.[0].id // empty')
+  # Find latest snapshot for this specific path (timeboxed)
+  echo "[restore-state] Looking up snapshot for $RESTORE_PATH..."
+  SNAPSHOT_ID=$(timeout 90 restic snapshots --path "$RESTORE_PATH" --latest 1 --json 2>/dev/null | jq -r '.[0].id // empty')
 
   if [ -z "$SNAPSHOT_ID" ]; then
-    echo "[restore-state] No snapshot found for $RESTORE_PATH, skipping"
+    echo "[restore-state] No snapshot found for $RESTORE_PATH (or lookup timed out), skipping"
     continue
   fi
 
   echo "[restore-state] Restoring: $RESTORE_PATH (snapshot $SNAPSHOT_ID)"
 
-  # Run restic restore from the snapshot that contains this path
-  if restic restore "$SNAPSHOT_ID" --target / --include "$RESTORE_PATH" 2>&1; then
+  # Run restic restore from the snapshot that contains this path. Verbose so
+  # we get periodic progress lines; timeboxed at 10 min per path so a single
+  # huge path can't deadlock the whole boot.
+  if timeout 600 restic restore "$SNAPSHOT_ID" --target / --include "$RESTORE_PATH" --verbose 2>&1; then
     echo "[restore-state] Completed: $RESTORE_PATH"
   else
-    echo "[restore-state] Warning: Restore may have had issues for $RESTORE_PATH (continuing)"
+    rc=$?
+    if [ "$rc" = "124" ]; then
+      echo "[restore-state] Timed out restoring $RESTORE_PATH after 10 min - continuing without it"
+    else
+      echo "[restore-state] Warning: Restore may have had issues for $RESTORE_PATH (continuing)"
+    fi
   fi
 done
 

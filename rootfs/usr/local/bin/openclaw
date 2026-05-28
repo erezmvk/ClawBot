@@ -7,15 +7,18 @@
 # Source environment utilities
 source /etc/s6-overlay/lib/env-utils.sh
 source_env_prefix OPENCLAW_
-source_env_prefix GRADIENT_
 
 # Run directly if already openclaw user, otherwise switch user
 if [ "$(id -un)" = "openclaw" ]; then
   export NVM_DIR="$HOME/.nvm"
   [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
   export PNPM_HOME="$HOME/.local/share/pnpm"
-  export PATH="$PNPM_HOME:$PATH"
-  exec "$PNPM_HOME/openclaw" "$@"
+  export PATH="$PNPM_HOME/bin:$PNPM_HOME:$PATH"
+  if [ -x "$PNPM_HOME/bin/openclaw" ]; then
+    exec "$PNPM_HOME/bin/openclaw" "$@"
+  else
+    exec "$PNPM_HOME/openclaw" "$@"
+  fi
 elif [ "$(id -u)" = "0" ]; then
   exec su - openclaw -c "openclaw$(printf ' %q' "$@")"
 else

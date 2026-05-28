@@ -119,7 +119,7 @@ RUN export SHELL=/bin/bash  && export NVM_DIR="$HOME/.nvm" \
   && npm install -g pnpm \
   && pnpm setup \
   && export PNPM_HOME="/home/openclaw/.local/share/pnpm" \
-  && export PATH="$PNPM_HOME:$PATH" \
+  && export PATH="$PNPM_HOME/bin:$PNPM_HOME:$PATH" \
   && pnpm add -g "openclaw@${OPENCLAW_VERSION}"
 
 # Copy and build MCP servers

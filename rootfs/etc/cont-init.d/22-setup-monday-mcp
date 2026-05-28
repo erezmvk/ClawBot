@@ -67,7 +67,7 @@ su - openclaw -c "
   export NVM_DIR=\"\$HOME/.nvm\"
   [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"
   export PNPM_HOME=\"\$HOME/.local/share/pnpm\"
-  export PATH=\"\$PNPM_HOME:\$PATH\"
+  export PATH=\"\$PNPM_HOME/bin:\$PNPM_HOME:\$PATH\"
 
   if command -v mcporter >/dev/null 2>&1; then
     mcporter config remove monday-boards 2>/dev/null || true

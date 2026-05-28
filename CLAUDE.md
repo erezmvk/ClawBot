@@ -31,7 +31,7 @@ The container uses [s6-overlay](https://github.com/just-containers/s6-overlay) f
 - `00-persist-env-vars` - Persists environment variables for s6
 - `00-setup-tailscale` - Configures Tailscale networking (if enabled)
 - `05-setup-restic` - Initializes Restic repository and exports environment variables
-- `06-restore-packages` - Restores dpkg package list from backup
+- `06-restore-packages` - Restores dpkg package list from backup. **Skipped when `SKIP_PACKAGE_RESTORE=true`** — recommended on ephemeral infra (App Platform) where the image is rebuilt every deploy and runtime apt installs don't persist.
 - `10-restore-state` - Restores application state from Restic snapshots
 - `11-reinstall-brews` - Reinstalls Homebrew packages from backup (if Homebrew installed)
 - `12-ssh-import-ids` - Imports SSH keys from GitHub (if GITHUB_USERNAME set)

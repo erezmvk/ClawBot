@@ -128,6 +128,13 @@ workers:
         scope: RUN_TIME
         value: ""
 
+      # On App Platform every redeploy gets a fresh container built from this
+      # Dockerfile, so apt packages are already present. Skip the slow
+      # dpkg-selections restore that otherwise adds 10-20 min to boot.
+      - key: SKIP_PACKAGE_RESTORE
+        scope: RUN_TIME
+        value: "true"
+
       - key: SSH_ENABLE
         scope: RUN_TIME
         value: "false"

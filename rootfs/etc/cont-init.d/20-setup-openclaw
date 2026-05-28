@@ -128,9 +128,24 @@ if [ -f "$CONFIG_FILE" ]; then
     jq 'del(.models.providers.gradient)' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
   fi
   if jq -e '.agents.defaults.model.primary | startswith("gradient/")' "$CONFIG_FILE" >/dev/null 2>&1; then
-    echo "[generate-config] Replacing gradient primary model with openai/gpt-5.3"
-    jq '.agents.defaults.model.primary = "openai/gpt-5.3"' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+    echo "[generate-config] Replacing gradient primary model with openai/gpt-5-chat-latest"
+    jq '.agents.defaults.model.primary = "openai/gpt-5-chat-latest"' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
   fi
+  # Rewrite stale OpenAI model IDs that never existed on user accounts (e.g. gpt-5.3, gpt-5.2,
+  # o3, o4-mini) to gpt-5-chat-latest. These were speculative entries that produced
+  # "400 model not found" errors at runtime.
+  STALE_MODELS=("gpt-5.3" "gpt-5.2" "o3" "o4-mini")
+  for stale in "${STALE_MODELS[@]}"; do
+    if jq -e --arg m "openai/$stale" '.agents.defaults.model.primary == $m' "$CONFIG_FILE" >/dev/null 2>&1; then
+      echo "[generate-config] Replacing stale primary model openai/$stale with openai/gpt-5-chat-latest"
+      jq '.agents.defaults.model.primary = "openai/gpt-5-chat-latest"' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+    fi
+    # Also remove the stale model entry from models.providers.openai.models[] if it's there.
+    if jq -e --arg id "$stale" '.models.providers.openai.models[]? | select(.id == $id)' "$CONFIG_FILE" >/dev/null 2>&1; then
+      echo "[generate-config] Removing stale model entry openai.$stale from models list"
+      jq --arg id "$stale" '.models.providers.openai.models |= map(select(.id != $id))' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+    fi
+  done
 elif [ -f "$DEFAULT_CONFIG" ]; then
   cp "$DEFAULT_CONFIG" "$CONFIG_FILE"
   echo "[generate-config] Using default config from $DEFAULT_CONFIG"

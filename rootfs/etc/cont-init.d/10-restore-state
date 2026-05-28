@@ -12,8 +12,13 @@
 
 source /etc/s6-overlay/lib/env-utils.sh
 
-# Load RESTIC_ vars
+# Load RESTIC_ vars. source_env_prefix sets the variables in this shell but
+# doesn't export them. The `timeout` wrapper used below spawns restic as a
+# child process which inherits ONLY exported variables - so restic would fail
+# with "Please specify repository location" because RESTIC_REPOSITORY and
+# RESTIC_PASSWORD aren't visible. Export everything restic needs explicitly.
 source_env_prefix RESTIC_
+export RESTIC_REPOSITORY RESTIC_PASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
 
 if [ "${SKIP_STATE_RESTORE:-false}" = "true" ]; then
   echo "[restore-state] SKIP_STATE_RESTORE=true, skipping (container will start with no backed-up state)"

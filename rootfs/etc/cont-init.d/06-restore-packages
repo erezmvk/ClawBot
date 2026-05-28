@@ -17,6 +17,10 @@ source /etc/s6-overlay/lib/env-utils.sh
 DPKG_SELECTIONS="/etc/openclaw/dpkg-selections"
 
 source_env_prefix RESTIC_
+# source_env_prefix doesn't export vars; the `timeout` wrapper below runs
+# restic as a child process which only inherits exported vars. Without these
+# exports, restic fails with "Please specify repository location".
+export RESTIC_REPOSITORY RESTIC_PASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
 
 # Allow opt-out (default OFF so existing deployments preserve behavior;
 # app.yaml sets it to "true" for App Platform).

@@ -95,9 +95,6 @@ workers:
       - key: OPENCLAW_GATEWAY_TOKEN
         scope: RUN_TIME
         type: SECRET
-      - key: GRADIENT_API_KEY
-        scope: RUN_TIME
-        type: SECRET
       - key: SSH_ENABLE
         scope: RUN_TIME
         value: "false"

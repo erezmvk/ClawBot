@@ -61,14 +61,7 @@ Required environment variables:
 All gateway settings are driven by the config file (`openclaw.json`). The init script dynamically builds the config based on environment variables:
 
 - Tailscale serve mode for networking
-- Gradient AI provider (if `GRADIENT_API_KEY` set)
-
-## Gradient AI Integration
-
-Set `GRADIENT_API_KEY` to enable DigitalOcean's serverless AI inference with models:
-- Llama 3.3 70B Instruct
-- Claude 4.5 Sonnet / Opus 4.5
-- DeepSeek R1 Distill Llama 70B
+- OpenAI / MiniMax providers (auto-injected when their API keys are set)
 
 ## Persistence
 

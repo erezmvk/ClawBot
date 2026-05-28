@@ -401,7 +401,6 @@ See **[CHEATSHEET.md](CHEATSHEET.md)** for the complete reference.
 | Variable                 | Description                                    |
 |--------------------------|------------------------------------------------|
 | `OPENCLAW_GATEWAY_TOKEN` | Gateway auth token (auto-generated if not set) |
-| `GRADIENT_API_KEY`       | DigitalOcean Gradient AI key                   |
 | `GITHUB_USERNAME`        | For SSH key fetching                           |
 
 ---

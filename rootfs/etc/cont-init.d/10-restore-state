@@ -37,13 +37,21 @@ if [ ! -f "$RESTIC_BACKUP_CONFIG_FILE" ]; then
   exit 1
 fi
 
-# Check if repository has any snapshots (timeboxed). Capture restic's exit
-# code via PIPESTATUS[0] - NOT $? - because the pipe to grep would otherwise
-# mask a timeout-124 as grep's "no-match-1".
+# Clear stale locks from prior failed/killed restic operations. Without this,
+# a single previous-container-crash leaves locks in the repo that block all
+# subsequent read operations (including this script's snapshot listing).
+echo "[restore-state] Clearing stale restic locks..."
+timeout 30 restic unlock --remove-all 2>&1 || echo "[restore-state] (unlock warned/failed - continuing)"
+
+# Check if repository has any snapshots (timeboxed). Use --no-lock to avoid
+# acquiring a write lock on a read-only operation. Capture restic's exit code
+# via PIPESTATUS[0] - NOT $? - because the pipe to grep would otherwise mask
+# a timeout-124 as grep's "no-match-1". DO NOT redirect stderr to /dev/null
+# here - we want restic errors visible so the boot log is debuggable.
 echo "[restore-state] Listing snapshots from repository (120s timeout)..."
-timeout 120 restic snapshots --latest 1 2>/dev/null | grep -q 'ID'
+timeout 120 restic snapshots --no-lock --latest 1 2>&1 | tee /tmp/restic-snapshots.out | grep -q 'ID'
 RESTIC_RC="${PIPESTATUS[0]}"
-GREP_RC="${PIPESTATUS[1]}"
+GREP_RC="${PIPESTATUS[2]}"
 
 if [ "$RESTIC_RC" = "124" ]; then
   # Timed out. A repo with snapshots that we couldn't list is the most
@@ -90,9 +98,9 @@ for i in $(seq 0 $((PATH_COUNT - 1))); do
   # Ensure parent directory exists
   mkdir -p "$(dirname "$RESTORE_PATH")"
 
-  # Find latest snapshot for this specific path (timeboxed)
+  # Find latest snapshot for this specific path (timeboxed, no lock needed)
   echo "[restore-state] Looking up snapshot for $RESTORE_PATH..."
-  SNAPSHOT_ID=$(timeout 90 restic snapshots --path "$RESTORE_PATH" --latest 1 --json 2>/dev/null | jq -r '.[0].id // empty')
+  SNAPSHOT_ID=$(timeout 90 restic snapshots --no-lock --path "$RESTORE_PATH" --latest 1 --json 2>/dev/null | jq -r '.[0].id // empty')
 
   if [ -z "$SNAPSHOT_ID" ]; then
     echo "[restore-state] No snapshot found for $RESTORE_PATH (or lookup timed out), skipping"

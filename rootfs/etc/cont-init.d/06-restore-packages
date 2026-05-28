@@ -1,87 +1,18 @@
 #!/command/with-contenv bash
-# Restore and reinstall user-installed packages from backup.
+# Permanently disabled on this deployment.
 #
-# On ephemeral container infra (e.g. DigitalOcean App Platform) every redeploy
-# spawns a fresh container built from the Dockerfile, which already has every
-# apt package it needs. In that case this script is mostly a no-op tax: it pulls
-# dpkg-selections from Spaces and runs `apt dselect-upgrade` against a fresh
-# image, churning silently for 10-20 min before openclaw can boot.
+# Original purpose: restore dpkg-selections from a restic snapshot and run
+# `apt dselect-upgrade` to reinstall packages a previous container had
+# installed at runtime. That makes sense on a long-lived VM.
 #
-# Set SKIP_PACKAGE_RESTORE=true to bypass this entirely (recommended on
-# App Platform). The diff between the snapshot's selections and the image's
-# selections can be verified after boot with:
-#   diff <(dpkg --get-selections | sort) <(sort /etc/openclaw/dpkg-selections | grep -v deinstall)
-
-source /etc/s6-overlay/lib/env-utils.sh
-
-DPKG_SELECTIONS="/etc/openclaw/dpkg-selections"
-
-source_env_prefix RESTIC_
-# source_env_prefix doesn't export vars; the `timeout` wrapper below runs
-# restic as a child process which only inherits exported vars. Without these
-# exports, restic fails with "Please specify repository location".
-export RESTIC_REPOSITORY RESTIC_PASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
-
-# Allow opt-out (default OFF so existing deployments preserve behavior;
-# app.yaml sets it to "true" for App Platform).
-if [ "${SKIP_PACKAGE_RESTORE:-false}" = "true" ]; then
-  echo "[restore-packages] SKIP_PACKAGE_RESTORE=true, skipping"
-  exit 0
-fi
-
-# Check if persistence is configured
-if [ -z "$RESTIC_REPOSITORY" ] || [ -z "$RESTIC_PASSWORD" ]; then
-  echo "[restore-packages] Persistence not configured, skipping"
-  exit 0
-fi
-
-# Check if repository has any snapshots (timeboxed - Spaces can hang)
-echo "[restore-packages] Checking for snapshots in restic repository (60s timeout)..."
-if ! timeout 60 restic snapshots --latest 1 2>/dev/null | grep -q 'ID'; then
-  rc=$?
-  if [ "$rc" = "124" ]; then
-    echo "[restore-packages] Timed out listing snapshots from Spaces - skipping package restore"
-  else
-    echo "[restore-packages] No snapshots found, skipping"
-  fi
-  exit 0
-fi
-
-# Step 1: Restore dpkg-selections file first (timeboxed)
-echo "[restore-packages] Restoring package selections from latest snapshot..."
-if timeout 120 restic restore latest --target / --include "$DPKG_SELECTIONS" 2>&1; then
-  echo "[restore-packages] Package selections restored"
-else
-  echo "[restore-packages] Warning: Could not restore package selections - continuing"
-  exit 0
-fi
-
-# Step 2: Reinstall packages if selections file exists
-if [ -f "$DPKG_SELECTIONS" ]; then
-  # Diff selections against the image's current selections - if they match,
-  # there's no work to do and we skip the slow apt-get steps.
-  CURRENT_SELECTIONS="$(mktemp)"
-  dpkg --get-selections | sort > "$CURRENT_SELECTIONS"
-  SAVED_SELECTIONS="$(mktemp)"
-  sort "$DPKG_SELECTIONS" > "$SAVED_SELECTIONS"
-  DIFF_COUNT=$(diff "$CURRENT_SELECTIONS" "$SAVED_SELECTIONS" | grep -c '^[<>]' || true)
-  rm -f "$CURRENT_SELECTIONS" "$SAVED_SELECTIONS"
-
-  if [ "$DIFF_COUNT" = "0" ]; then
-    echo "[restore-packages] Snapshot selections match image - nothing to do"
-    exit 0
-  fi
-
-  echo "[restore-packages] $DIFF_COUNT package selection difference(s) detected - reinstalling..."
-  # Update apt cache (verbose so we can see progress)
-  apt-get update
-  # Sync dpkg's available database with apt's cache (required for dselect-upgrade)
-  apt-cache dumpavail | dpkg --update-avail -
-  # Now set selections and install
-  dpkg --set-selections < "$DPKG_SELECTIONS"
-  apt-get dselect-upgrade -y || echo "[restore-packages] Warning: Some packages may have failed to install"
-  echo "[restore-packages] Package reinstallation complete"
-else
-  echo "[restore-packages] No package selections found."
-  exit 0
-fi
+# On DigitalOcean App Platform every redeploy spawns a fresh container built
+# from the Dockerfile, which already includes every apt package this image
+# needs. The "restore" step adds no value and used to:
+#   - hold a restic lock for the duration of the dpkg-selections restore;
+#   - if killed by the 120s timeout, leave a stale lock behind that broke the
+#     subsequent 10-restore-state's snapshot listing.
+#
+# We now skip unconditionally. The dpkg-selections file from /etc/openclaw
+# is still in the image for anyone who wants to inspect it.
+echo "[restore-packages] Permanently disabled on this deployment (App Platform always builds packages from Dockerfile)"
+exit 0

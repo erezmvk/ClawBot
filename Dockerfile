@@ -116,7 +116,7 @@ RUN export SHELL=/bin/bash  && export NVM_DIR="$HOME/.nvm" \
   && nvm install --lts \
   && nvm use --lts \
   && nvm alias default lts/* \
-  && npm install -g pnpm \
+  && npm install -g pnpm@10 \
   && pnpm setup \
   && export PNPM_HOME="/home/openclaw/.local/share/pnpm" \
   && export PATH="$PNPM_HOME/bin:$PNPM_HOME:$PATH" \

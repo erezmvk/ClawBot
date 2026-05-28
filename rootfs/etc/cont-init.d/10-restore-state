@@ -32,15 +32,39 @@ if [ ! -f "$RESTIC_BACKUP_CONFIG_FILE" ]; then
   exit 1
 fi
 
-# Check if repository has any snapshots (timeboxed)
+# Check if repository has any snapshots (timeboxed). Capture restic's exit
+# code via PIPESTATUS[0] - NOT $? - because the pipe to grep would otherwise
+# mask a timeout-124 as grep's "no-match-1".
 echo "[restore-state] Listing snapshots from repository (120s timeout)..."
-if ! timeout 120 restic snapshots --latest 1 2>/dev/null | grep -q 'ID'; then
-  rc=$?
-  if [ "$rc" = "124" ]; then
-    echo "[restore-state] Timed out listing snapshots - skipping state restore. Container will start fresh."
-  else
-    echo "[restore-state] No snapshots found in repository, skipping"
+timeout 120 restic snapshots --latest 1 2>/dev/null | grep -q 'ID'
+RESTIC_RC="${PIPESTATUS[0]}"
+GREP_RC="${PIPESTATUS[1]}"
+
+if [ "$RESTIC_RC" = "124" ]; then
+  # Timed out. A repo with snapshots that we couldn't list is the most
+  # dangerous case: booting fresh will let the backup loop snapshot the
+  # empty /data/.openclaw on top of the user's real backups.
+  echo "[restore-state] ERROR: Timed out listing snapshots from Spaces after 120s." >&2
+  echo "[restore-state] Refusing to start openclaw to protect existing snapshots." >&2
+  echo "[restore-state] Recovery: set ENABLE_SPACES=false, redeploy, then manually" >&2
+  echo "[restore-state]           restic restore from a known-good snapshot." >&2
+  echo "[restore-state] To bypass this guard (and start with empty state), set" >&2
+  echo "[restore-state]           ALLOW_EMPTY_STATE_BOOT=true. This is dangerous - the" >&2
+  echo "[restore-state]           backup loop will start snapshotting an empty state." >&2
+  if [ "${ALLOW_EMPTY_STATE_BOOT:-false}" != "true" ]; then
+    exit 1
   fi
+  echo "[restore-state] ALLOW_EMPTY_STATE_BOOT=true - proceeding without restored state"
+  exit 0
+elif [ "$RESTIC_RC" != "0" ]; then
+  echo "[restore-state] ERROR: restic snapshots exited with code $RESTIC_RC" >&2
+  if [ "${ALLOW_EMPTY_STATE_BOOT:-false}" != "true" ]; then
+    echo "[restore-state] Refusing to start openclaw. Set ALLOW_EMPTY_STATE_BOOT=true to bypass." >&2
+    exit 1
+  fi
+  exit 0
+elif [ "$GREP_RC" != "0" ]; then
+  echo "[restore-state] No snapshots found in repository, skipping"
   exit 0
 fi
 echo "[restore-state] Snapshots present, proceeding with restore"
